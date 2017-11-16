@@ -13,10 +13,6 @@ int main()
 	Tile *map = LoadMap(&width, &height);
 
 // unit stuff
-	FriendlyList = malloc(sizeof(UnitList));
-	FriendlyList->unit = NULL;
-	FriendlyList->next = NULL;
-
 	CreateUnit(1,5);
 	CreateUnit(5,5);
 
@@ -32,8 +28,6 @@ int main()
 
 
 	Path *path = NULL;
-//	FindPath(map,width,height,1,1,8,18,path);
-//	FriendlyList->next->unit->path = path;
 
 	printf("w:%i,h:%i",width,height);
 
@@ -56,7 +50,7 @@ int main()
 		{
 			selected = SelectUnit(camera);
 		}
-
+/*
 		if(IsKeyDown(KEY_M))
 		{
 			if(selected)
@@ -82,6 +76,7 @@ int main()
 				}
 			}
 		}
+*/
 // selected
 		if(selected)
 		{
@@ -97,7 +92,6 @@ int main()
 
 // done
 	free(map);
-	//free(unit);
 
 	CloseWindow();
 	return 0;

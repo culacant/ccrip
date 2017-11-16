@@ -1,150 +1,4 @@
-#include "raylib.h"
-#include <stdlib.h>
-#include <stdio.h>
-
-#include "map.h"
-#include "unit.h"
-
-// unit stuff
-typedef struct Unit
-{
-	int posx;
-	int posy;
-	Model model;
-} Unit;
-
-typedef struct UnitList UnitList;
-
-struct UnitList
-{
-	Unit *unit;
-	UnitList *next;
-} ;
-
-UnitList *FriendlyList;
-
-Unit *CreateUnit(int x, int y)
-{
-	Unit *unit = malloc(sizeof(Unit));
-	unit->model = LoadModel("resources/infantry1.obj");
-	unit->posx = x;
-	unit->posy = y;
-	
-	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
-	{
-		Looper = Looper->next;
-	}
-	UnitList *NewUnit = malloc(sizeof(UnitList));
-	NewUnit->unit = unit;
-	NewUnit->next = NULL;
-	Looper->next = NewUnit;
-
-	return unit;
-}
-void DrawUnits()
-{
-	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
-	{
-		Looper = Looper->next;
-
-		DrawModel(Looper->unit->model,(Vector3){Looper->unit->posx,0.0f,Looper->unit->posy},1.0f,BLUE);
-	}
-
-}
-
-Unit *SelectUnit(UnitList *unitlist, Camera camera)
-{
-	Ray mouseray;
-	BoundingBox bbox;
-
-	mouseray = GetMouseRay(GetMousePosition(),camera);
-
-
-	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
-	{
-		Looper = Looper->next;
-		bbox = (BoundingBox){(Vector3){Looper->unit->posx - 0.5,0,Looper->unit->posy-0.5},
-				     (Vector3){Looper->unit->posx + 0.5,1,Looper->unit->posy+0.5}};
-		DrawBoundingBox(bbox,RED);
-		if(CheckCollisionRayBox(mouseray,bbox))
-		{
-			printf("selected");
-			return Looper->unit;
-		}
-	}
-
-	return NULL;
-}
-
-// map stuff
-int *LoadMap(int *w, int *h)
-{
-	FILE*fp;
-	fp = fopen("map.txt","r");
-	if(!fp)
-	{
-		printf("error opening map");
-		return 0;
-	}
-
-	fscanf(fp,"%i %i",w,h);
-	fgetc(fp);
-
-	int width = (*w);
-	int height = (*h);
-
-	int *map = malloc(width*height*sizeof(int));
-
-	int x = 0;
-	int y = 0;
-	char i = fgetc(fp);
-
-	while(i!= EOF)
-	{
-		if(i == '\n')
-		{
-			y++;
-			x = 0;
-		}
-		else
-		{
-			map[x+y*width] = (int)i;
-			x++;
-		}
-		i = fgetc(fp);
-	}
-	fclose(fp);
-
-	return map;
-}
-int DrawMap(int *map, int w, int h)
-{
-	int x, y;
-	Vector3 pos;
-	Color color;
-	for(y=0;y<h;y++)
-	{
-		for(x=0;x<w;x++)
-		{
-			pos = (Vector3){x,0,y};
-			color;
-			switch(map[x+y*w])
-			{
-				case 49:
-					color = GREEN;
-					break;
-				case 50:
-					color = BLUE;
-					break;
-			}
-			DrawPlane(pos,(Vector2){1.0f,1.0f},color);
-		}
-	}
-	return 0;
-}
+#include "ccrip.h"
 
 int main()
 {
@@ -156,16 +10,16 @@ int main()
 
 // map stuff
 	int width, height;
-	int *map = LoadMap(&width, &height);
-	printf("\n\n%i\n\n",map[1+1]);
+	Tile *map = LoadMap(&width, &height);
 
 // unit stuff
-	FriendlyList = malloc(sizeof(UnitList));
-	FriendlyList->unit = NULL;
+	FriendlyList = malloc(sizeof(Unit));
 	FriendlyList->next = NULL;
 
 	CreateUnit(1,5);
 	CreateUnit(5,5);
+
+	Unit *selected = NULL;
 
 // camera stuff
 	Camera camera;
@@ -176,9 +30,16 @@ int main()
 	SetCameraMode(camera, CAMERA_FIRST_PERSON);
 
 
+	Path *path = NULL;
+//	FindPath(map,width,height,1,1,8,18,path);
+//	FriendlyList->next->unit->path = path;
+
+	printf("w:%i,h:%i",width,height);
+
 // main loop
 	while(!WindowShouldClose())
 	{
+		UpdateUnits(10);
 		UpdateCamera(&camera);
 		ShowCursor();
 
@@ -189,8 +50,43 @@ int main()
 		Begin3dMode(camera);
 
 		DrawMap(map, width,height);
-		SelectUnit(FriendlyList,camera);
+// input
+		if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+		{
+			selected = SelectUnit(camera);
+		}
 
+		if(IsKeyDown(KEY_M))
+		{
+			if(selected)
+			{
+				Ray ray;
+				ray = GetMouseRay(GetMousePosition(),camera);
+				RayHitInfo groundhit = GetCollisionRayGround(ray,0.0f);
+				if(groundhit.hit)
+				{
+					int x,y;
+					x = (int)groundhit.position.x;
+					y = (int)groundhit.position.z;
+					printf("hit on: %i,%i\n",x,y);
+					if(selected->path)
+						free(selected->path);
+
+					path = malloc(sizeof(Path));
+					FindPath(map,width,height,selected->posx,selected->posy,x,y,path);
+					selected->path = path;
+					path = NULL;
+
+					DrawCube(groundhit.position,0.3,0.3,0.3,RED);
+				}
+			}
+		}
+// selected
+		if(selected)
+		{
+			if(selected->path)
+				DrawPath(selected->path);
+		}
 
 		DrawUnits();
 

@@ -3,61 +3,65 @@
 // unit stuff
 Unit *CreateUnit(int x, int y)
 {
-	Unit *unit = malloc(sizeof(Unit));
-	unit->model = LoadModel("resources/infantry1.obj");
-	unit->posx = x;
-	unit->posy = y;
-	unit->path = NULL;
-	unit->movespeed = 1000;
-	unit->movespeedtick = unit->movespeed;
-	
-	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
+	UnitList *looper = FriendlyList;
+	while(looper)
 	{
-		Looper = Looper->next;
+		looper = looper->next;
 	}
-	UnitList *NewUnit = malloc(sizeof(UnitList));
-	NewUnit->unit = unit;
-	NewUnit->next = NULL;
-	Looper->next = NewUnit;
+	looper = malloc(sizeof(UnitList));
 
-	return unit;
+	looper->unit.model = LoadModel("resources/infantry1.obj");
+	looper->unit.posx = x;
+	looper->unit.posy = y;
+	looper->unit.fposx = -1;
+	looper->unit.fposy = -1;
+	looper->unit.path = NULL;
+	looper->unit.movespeed = 1000;
+	looper->unit.movespeedtick = looper->unit.movespeed;
+	
+
+	return &looper->unit;
 }
 void DrawUnits()
 {
 	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
+	while(Looper)
 	{
+		DrawModel(Looper->unit.model,(Vector3){Looper->unit.posx,0.0f,Looper->unit.posy},1.0f,BLUE);
 		Looper = Looper->next;
-
-		DrawModel(Looper->unit->model,(Vector3){Looper->unit->posx,0.0f,Looper->unit->posy},1.0f,BLUE);
 	}
 
 }
 void UpdateUnits(int deltatime)
 {
 	UnitList *looper = FriendlyList;
-	while(looper->next!=NULL)
+	while(looper)
 	{
-		looper = looper->next;
 // update unit
-		if(looper->unit->path != NULL)
+/*
+		if(looper->unit.path != NULL)
 		{
-			looper->unit->movespeedtick -= deltatime;
-			if(looper->unit->movespeedtick <= 0)
+			looper->unit.movespeedtick -= deltatime;
+			if(looper->unit.movespeedtick <= 0)
 			{
-				printf("x: %i, y: %i\n",looper->unit->posx,looper->unit->posy);
-				looper->unit->movespeedtick = looper->unit->movespeed;
+				printf("x: %i, y: %i\n",looper->unit.posx,looper->unit.posy);
+				looper->unit.movespeedtick = looper->unit.movespeed;
 
-				looper->unit->posx = looper->unit->path->x;
-				looper->unit->posy = looper->unit->path->y;
+				looper->unit.posx = looper->unit.path->x;
+				looper->unit.posy = looper->unit.path->y;
 
-				Path *lastpath = looper->unit->path;
-				looper->unit->path = looper->unit->path->next;
+				Path *lastpath = looper->unit.path;
+				looper->unit.path = looper->unit.path->next;
 				free(lastpath);
 				lastpath = NULL;
 			}
 		}
+		*/
+		if(looper->unit.fposx!=-1 && looper->unit.fposy!=-1)
+		{
+		// fire
+		}
+		looper = looper->next;
 	}
 }
 
@@ -73,13 +77,13 @@ Unit *SelectUnit(Camera camera)
 	while(Looper->next!=NULL)
 	{
 		Looper = Looper->next;
-		bbox = (BoundingBox){(Vector3){Looper->unit->posx - 0.5,0,Looper->unit->posy-0.5},
-				     (Vector3){Looper->unit->posx + 0.5,1,Looper->unit->posy+0.5}};
+		bbox = (BoundingBox){(Vector3){Looper->unit.posx - 0.5,0,Looper->unit.posy-0.5},
+				     (Vector3){Looper->unit.posx + 0.5,1,Looper->unit.posy+0.5}};
 		DrawBoundingBox(bbox,RED);
 		if(CheckCollisionRayBox(mouseray,bbox))
 		{
 			printf("selected");
-			return Looper->unit;
+			return &Looper->unit;
 		}
 	}
 

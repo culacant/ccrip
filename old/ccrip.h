@@ -80,7 +80,7 @@ typedef struct Unit
 } Unit;
 struct UnitList
 {
-	Unit unit;
+	Unit *unit;
 	UnitList *next;
 };
 
