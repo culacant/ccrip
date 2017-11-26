@@ -12,6 +12,8 @@ int main()
 	int width, height;
 	Tile *map = LoadMap(&width, &height);
 
+	FriendlyList = NULL;
+
 // unit stuff
 	CreateUnit(1,5);
 	CreateUnit(5,5);
@@ -35,6 +37,7 @@ int main()
 	while(!WindowShouldClose())
 	{
 		UpdateUnits(10);
+		UpdateBullets(10);
 		UpdateCamera(&camera);
 		ShowCursor();
 
@@ -77,6 +80,14 @@ int main()
 			}
 		}
 */
+		if(IsKeyDown(KEY_F))
+		{
+			if(selected)
+			{
+				FireBullet(selected->posx, selected->posy, 5,5);
+				printf("bullet fired");
+			}
+		}
 // selected
 		if(selected)
 		{
@@ -85,6 +96,7 @@ int main()
 		}
 
 		DrawUnits();
+		DrawBullets();
 
 		End3dMode();
 		EndDrawing();

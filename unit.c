@@ -4,12 +4,23 @@
 Unit *CreateUnit(int x, int y)
 {
 	UnitList *looper = FriendlyList;
-	while(looper)
+	if(looper)
 	{
+		while(looper->next)
+		{
+			looper = looper->next;
+		}
+		looper->next = malloc(sizeof(UnitList));
 		looper = looper->next;
 	}
-	looper = malloc(sizeof(UnitList));
+	else
+	{
+		FriendlyList = malloc(sizeof(UnitList));
+		looper = FriendlyList;
+	}
 
+
+	looper->next = NULL;
 	looper->unit.model = LoadModel("resources/infantry1.obj");
 	looper->unit.posx = x;
 	looper->unit.posy = y;
@@ -74,9 +85,8 @@ Unit *SelectUnit(Camera camera)
 
 
 	UnitList *Looper = FriendlyList;
-	while(Looper->next!=NULL)
+	while(Looper)
 	{
-		Looper = Looper->next;
 		bbox = (BoundingBox){(Vector3){Looper->unit.posx - 0.5,0,Looper->unit.posy-0.5},
 				     (Vector3){Looper->unit.posx + 0.5,1,Looper->unit.posy+0.5}};
 		DrawBoundingBox(bbox,RED);
@@ -85,6 +95,7 @@ Unit *SelectUnit(Camera camera)
 			printf("selected");
 			return &Looper->unit;
 		}
+		Looper = Looper->next;
 	}
 
 	return NULL;

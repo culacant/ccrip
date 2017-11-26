@@ -60,8 +60,9 @@ struct BulletList
 BulletList *bulletlist;
 
 void FireBullet(int ox, int oy, int tx, int ty);
-void UpdateBullet(int deltatime);
-void RemoveBullet(Bullet *bullet, BulletList *bulletlist);
+void UpdateBullets(int deltatime);
+void DrawBullets();
+void RemoveBullet(Bullet *bullet);
 
 // unit stuff
 typedef struct UnitList UnitList;
