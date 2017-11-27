@@ -71,6 +71,7 @@ void UpdateUnits(int deltatime)
 		if(looper->unit.fposx!=-1 && looper->unit.fposy!=-1)
 		{
 		// fire
+			FireBullet(looper->unit.posx,looper->unit.posy,looper->unit.fposx, looper->unit.fposy);
 		}
 		looper = looper->next;
 	}
