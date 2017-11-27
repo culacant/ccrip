@@ -84,8 +84,26 @@ int main()
 		{
 			if(selected)
 			{
-				FireBullet(selected->posx, selected->posy, 5,5);
-				printf("bullet fired");
+				Ray ray;
+				ray = GetMouseRay(GetMousePosition(),camera);
+				RayHitInfo groundhit = GetCollisionRayGround(ray,0.0f);
+				if(groundhit.hit)
+				{
+					int x,y;
+					x = (int)groundhit.position.x;
+					y = (int)groundhit.position.z;
+					selected->fposx = x;
+					selected->fposy = y;
+					DrawCube(groundhit.position,0.3,0.3,0.3,RED);
+				}
+			}
+		}
+		if(IsKeyDown(KEY_C))
+		{
+			if(selected)
+			{
+				selected->fposx = -1;
+				selected->fposy = -1;
 			}
 		}
 // selected

@@ -45,11 +45,13 @@ typedef struct BulletList BulletList;
 // bullet stuff
 typedef struct Bullet
 {
-	int x;
-	int y;
-	int ttl;
-	int dirx;
-	int diry;
+	float x;
+	float y;
+	float z;
+	float dirx;
+	float diry;
+	int velx;
+	int velz;
 } Bullet;
 struct BulletList
 {
