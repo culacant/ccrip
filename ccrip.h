@@ -5,10 +5,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
-
+// this is a test
 // map stuff
 
-typedef struct Tile
+struct Tile
 {
 	int graphic;
 	bool canWalk;
@@ -31,7 +31,7 @@ struct Node
 };
 
 typedef struct Path Path;
-struct Path 
+struct Path
 {
 	int x;
 	int y;
