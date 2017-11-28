@@ -48,7 +48,11 @@ void UpdateBullets(int deltatime)
 
 		if(looper->bullet.z <= 0)
 		{
+<<<<<<< HEAD
 			RemoveBullet(&looper->bullet);
+=======
+//			RemoveBullet(&looper->bullet);
+>>>>>>> ec3972bfdb66c64248e4a427f18cbaf8550ea89c
 		}
 		looper = looper->next;
 	}
