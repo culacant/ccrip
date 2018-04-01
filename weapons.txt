@@ -1,0 +1,15 @@
+weaponcnt 2
+
+weapon 1
+name M32
+FP 2
+IV 10
+burst 3
+flags NONE,
+
+weapon 2
+name M256
+FP 2
+IV 10
+burst 5
+flags SUPPORT,

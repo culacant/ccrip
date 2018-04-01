@@ -1,0 +1,95 @@
+unitcnt 3
+
+teamcnt 2
+teamunitcnt 1,1
+teamunitcnt 2,2
+
+unit 1
+team 1
+uname one
+commandlevel SQUAD
+uflags EXISTS,
+position 1,0,6
+figurecnt 3
+
+figure 1
+fname oneone
+weapon 0
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV AVERAGE
+quality VETERAN
+confidence ROUTED
+fflags EXISTS,LEADER
+
+figure 2
+fname onetwo
+weapon 0
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence CONFIDENT
+fflags EXISTS
+
+figure 3
+fname onethree
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence SHAKEN
+fflags EXISTS
+
+unit 2
+team 2
+uname two
+commandlevel SQUAD
+uflags EXISTS,
+position 1,0,10
+figurecnt 1
+
+figure 1
+fname twoone
+weapon 0
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS,LEADER
+
+unit 3
+team 2
+uname three
+commandlevel SQUAD
+uflags EXISTS,
+position 1,0,10
+figurecnt 2
+
+figure 1
+fname threeone
+weapon 0
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS,LEADER
+
+figure 2
+fname threetwo
+weapon 0
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS
