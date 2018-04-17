@@ -1,4 +1,5 @@
 #define MAXFIGURES 12
+#define MAXSPOTS   25
 #define NUMTEXTURES 4
 
 #define TYPEHEIGHT 32
@@ -17,6 +18,7 @@
 #define FACETOFACEDISTANCE 5
 #define SELECTDISTANCE 5
 #define MOVEDISTANCE 0.5
+#define COVERDISTANCE 5
 
 enum LOGLEVELS
 {
@@ -134,6 +136,8 @@ enum FLAGS
   CLOSERANGE  = 1<<6,
   TERROR      = 1<<7,
   LEADER      = 1<<8,
+  HEAVY       = 1<<9,
+  BLAST       = 1<<10,
 
   DETACHED,
   LASTSTAND,
@@ -160,19 +164,28 @@ enum ACTIONS
   ACTION_REGROUP        =  9,
   ACTION_IDLE           = 10,
   ACTION_CASUALTY       = 11,
+  ACTION_SPOT           = 12,
 };
 enum COMMANDS
 {
   COMMAND_IDLE          = 0,
   COMMAND_FIRE          = 1,
   COMMAND_MOVE          = 2,
+  COMMAND_TEST          = 99,
 // COMMAND_INTERRUPTED ?
 };
 
 #define TILERES 10
 #define TERRAINRES 10
-#define NUMTERRAINTYPES 1
+#define NUMTERRAINTYPES 2
 enum TERRAINTYPESENUM
 {
   TERRAIN_FLAT          = 0,
+  TERRAIN_WALL          = 1,
+};
+enum LINEVALUES
+{
+  COVER     = 0,
+  VISIBLE   = 1,
+  WALKABLE  = 2,
 };

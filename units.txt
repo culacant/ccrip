@@ -14,7 +14,7 @@ figurecnt 3
 
 figure 1
 fname oneone
-weapon 0
+weapon 1
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT
@@ -25,7 +25,7 @@ fflags EXISTS,LEADER
 
 figure 2
 fname onetwo
-weapon 0
+weapon 1
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT
@@ -36,7 +36,7 @@ fflags EXISTS
 
 figure 3
 fname onethree
-weapon 1
+weapon 2
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT
@@ -47,7 +47,7 @@ fflags EXISTS
 
 unit 2
 team 2
-uname two
+uname mortar
 commandlevel SQUAD
 uflags EXISTS,
 position 1,0,10
@@ -55,7 +55,7 @@ figurecnt 1
 
 figure 1
 fname twoone
-weapon 0
+weapon 3
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT
@@ -74,7 +74,7 @@ figurecnt 2
 
 figure 1
 fname threeone
-weapon 0
+weapon 1
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT
@@ -85,7 +85,7 @@ fflags EXISTS,LEADER
 
 figure 2
 fname threetwo
-weapon 0
+weapon 1
 ammo 100
 movespeed 100
 AT PARTIAL_LIGHT

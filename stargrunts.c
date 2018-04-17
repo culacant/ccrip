@@ -8,17 +8,34 @@
 #include <string.h>
 #include <math.h>
 
+/*
+██████  ███████ ██████  ██    ██  ██████
+██   ██ ██      ██   ██ ██    ██ ██
+██   ██ █████   ██████  ██    ██ ██   ███
+██   ██ ██      ██   ██ ██    ██ ██    ██
+██████  ███████ ██████   ██████   ██████
+*/
 void DebugLog(int loglvl,const char *format, ...)
 {
   va_list args;
   va_start(args, format);
   if(LOGLEVEL & loglvl)
   {
+    char logstr[MAXNAMELENGTH];
+    loglevel_to_string(logstr,loglvl);
+    printf("%s",logstr);
     vprintf(format,args);
   }
   va_end(args);
 }
 
+/*
+██████  ██  ██████ ███████
+██   ██ ██ ██      ██
+██   ██ ██ ██      █████
+██   ██ ██ ██      ██
+██████  ██  ██████ ███████
+*/
 int roll_die(int sides)
 {
   int roll = rand()%sides+1;
@@ -43,7 +60,6 @@ int roll_die_number(int sides, int target)
     DebugLog(LOGROLLS,"target %i critical fail\n",target);
     return -1;
   }
-
   DebugLog(LOGROLLS,"target %i fail\n",target);
   return 0;
 }
@@ -111,6 +127,13 @@ void openshift(int sides1, int dir, int sides2, int *result)
   DebugLog(LOGROLLS,"are now: %i, %i\n",result[0],result[1]);
 }
 
+/*
+████████ ██  ██████ ██   ██ ███████
+   ██    ██ ██      ██  ██  ██
+   ██    ██ ██      █████   ███████
+   ██    ██ ██      ██  ██       ██
+   ██    ██  ██████ ██   ██ ███████
+*/
 void tick_units(Unit *units,int deltatime)
 {
   Figure *figure = NULL;
@@ -121,7 +144,6 @@ void tick_units(Unit *units,int deltatime)
     unit = &units[i];
     if(get_unit_can_do_action(*unit))
     {
-  // TODO: test for friendly/enemy targets (in actions)
       for(int j=0;j<MAXFIGURES;j++)
       {
         figure = &unit->figures[j];
@@ -130,6 +152,12 @@ void tick_units(Unit *units,int deltatime)
 // rotation and movement
           figure->model.transform = MatrixRotateY(figure->facing);
           figure->actiontimer -= deltatime;
+          figure->spottingtimer -= deltatime;
+          if(figure->spottingtimer< 0)
+          {
+            do_action_spot(*unit,j);
+            figure->spottingtimer = ACTIONTIMERS[ACTION_SPOT];
+          }
           if(figure->actiontimer < 0)
           {
             switch(figure->action)
@@ -149,14 +177,17 @@ void tick_units(Unit *units,int deltatime)
                 if(figuretarget)
                 {
                   figure->ammo -= figure->burst;
-                  do_action_fire(*figure,figuretarget);
+                  if(figure->wflags&BLAST)
+                    do_action_fire_position(*figure,figuretarget->position);
+                  else
+                    do_action_fire(*figure,figuretarget);
                 }
                 else
                   figure->action = ACTION_NOTARGET;
                 break;
               case ACTION_MOVE:
                 figure->doingcommand = do_action_move(unit,j);
-                printf("%i\n",figure->doingcommand);
+                DebugLog(LOGACTIONS,"%i\n",figure->doingcommand);
                 break;
               case ACTION_MOVE_POSITION:
                 do_action_move_in_position(figure);
@@ -182,6 +213,13 @@ void tick_units(Unit *units,int deltatime)
   }
 }
 
+/*
+ ██████  ██████  ███    ███ ███    ███  █████  ███    ██ ██████  ███████
+██      ██    ██ ████  ████ ████  ████ ██   ██ ████   ██ ██   ██ ██
+██      ██    ██ ██ ████ ██ ██ ████ ██ ███████ ██ ██  ██ ██   ██ ███████
+██      ██    ██ ██  ██  ██ ██  ██  ██ ██   ██ ██  ██ ██ ██   ██      ██
+ ██████  ██████  ██      ██ ██      ██ ██   ██ ██   ████ ██████  ███████
+*/
 int command_fire(Unit *unit1,Unit *unit2)
 {
   unit1->command = COMMAND_FIRE;
@@ -195,7 +233,7 @@ int command_move(Unit *unit,Vector3 position)
   unit->goal = position;
   unit->command = COMMAND_MOVE;
   unit->facing = atan2f(unit->goal.z-get_unit_position(*unit).z,unit->goal.x-get_unit_position(*unit).x);
-  DebugLog(LOGROLLS,"unit->command = %i\n",unit->command);
+  DebugLog(LOGACTIONS,"unit->command = %i\n",unit->command);
   for(int i=0;i<MAXFIGURES;i++)
     unit->figures[i].doingcommand = 1;
   return 1;
@@ -206,38 +244,13 @@ int command_idle(Unit *unit)
   return 1;
 }
 
-int test_communicate(Unit unit1,Unit unit2)
-{
-  DebugLog(LOGROLLS,"test_communicate\n");
-  if(test_facetoface(unit1,unit2))
-  {
-    DebugLog(LOGROLLS,"face to face: success\n");
-    return 1;
-  }
-  int leaderid1 = get_leader_id(unit1);
-  int leaderid2 = get_leader_id(unit2);
-  int lowestLV = unit1.figures[leaderid1].LV;
-  if(lowestLV > unit2.figures[leaderid2].LV)
-  {
-    lowestLV = unit2.figures[leaderid2].LV;
-    DebugLog(LOGROLLS,"Unit 2 LV lower\n");
-  }
-  else
-    DebugLog(LOGROLLS,"Unit 1 LV lower\n");
-  int commandleveldiff = abs(unit1.commandlevel - unit2.commandlevel -1);
-  DebugLog(LOGROLLS,"command level difference: %i\n",commandleveldiff);
-  if(commandleveldiff>0)
-    closedshift(lowestLV,commandleveldiff);
-
-  int result = roll_die_number(unit1.figures[leaderid1].quality,lowestLV);
-  if(result > 0)
-  {
-    DebugLog(LOGROLLS,"success\n");
-    return 1;
-  }
-  DebugLog(LOGROLLS,"failure\n");
-  return 0;
-}
+/*
+██    ██ ███    ██ ██ ████████      █████   ██████ ████████ ██  ██████  ███    ██ ███████
+██    ██ ████   ██ ██    ██        ██   ██ ██         ██    ██ ██    ██ ████   ██ ██
+██    ██ ██ ██  ██ ██    ██        ███████ ██         ██    ██ ██    ██ ██ ██  ██ ███████
+██    ██ ██  ██ ██ ██    ██        ██   ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
+ ██████  ██   ████ ██    ██        ██   ██  ██████    ██    ██  ██████  ██   ████ ███████
+*/
 int do_action_rally(Unit unit1, Unit *unit2)
 {
   DebugLog(LOGROLLS,"do_action_rally\n");
@@ -292,7 +305,13 @@ int do_action_regroup(Unit *unit1,Unit *unit2)
   return 1;
 }
 
-//int do_action_closecombat(Figure *figure1,Figure *figure2);
+/*
+███████ ██  ██████  ██    ██ ██████  ███████      █████   ██████ ████████ ██  ██████  ███    ██ ███████
+██      ██ ██       ██    ██ ██   ██ ██          ██   ██ ██         ██    ██ ██    ██ ████   ██ ██
+█████   ██ ██   ███ ██    ██ ██████  █████       ███████ ██         ██    ██ ██    ██ ██ ██  ██ ███████
+██      ██ ██    ██ ██    ██ ██   ██ ██          ██   ██ ██         ██    ██ ██    ██ ██  ██ ██      ██
+██      ██  ██████   ██████  ██   ██ ███████     ██   ██  ██████    ██    ██  ██████  ██   ████ ███████
+*/
 int do_action_move(Unit *unit,int figureid)
 {
   Figure *figure = &unit->figures[figureid];
@@ -300,18 +319,11 @@ int do_action_move(Unit *unit,int figureid)
   {
     Vector3 goalpos = get_position_formation(*unit,figureid);
     figure->facing = atan2f(goalpos.z-figure->position.z,goalpos.x-figure->position.x);
-    /*
-    Matrix translatemat = MatrixMultiply(MatrixIdentity(),MatrixTranslate(1.0f,0.0f,0.0f));
-    figure->transform = MatrixMultiply(translatemat,rotatemat);
-    figure->transform= MatrixMultiply(figure->transform,MatrixTranslate(cosf(angle),0.0f,sinf(angle)));
-    */
-
     Vector3 movepos;
     movepos.x = cosf(figure->facing);
     movepos.z = sinf(figure->facing);
     movepos.y = 0.0f;
     figure->position = Vector3Add(figure->position,movepos);
-
     if(Vector3Distance(figure->position,goalpos) < MOVEDISTANCE)
     {
       return 0;
@@ -322,6 +334,129 @@ int do_action_move(Unit *unit,int figureid)
     return 0;
 }
 
+int do_action_spot_figure(Figure spotter,Figure defender)
+{
+  if(!test_figure_LOS(spotter,defender))
+    return 0;
+
+  int cover = get_cover(spotter,defender);
+  int rangedie = get_range_die(spotter, defender,cover);
+
+  int numdice = 2;
+  int *Adice = malloc(sizeof(int)*numdice);
+  int total;
+  Adice[0] = spotter.quality;
+// sensor die
+  Adice[1] = 4;
+  int result = roll_die_dice(Adice,numdice,rangedie,&total);
+  free(Adice);
+// if not idle (i e busy), result must be 2 to win
+  if(spotter.action != ACTION_IDLE)
+  {
+    result = result/2;
+  }
+  return result;
+}
+int do_action_spot(Unit unit, int spotterid)
+{
+  float angle;
+  float angled;
+  int retval = 0;
+  int alreadyspotted = 0;
+  Figure spotter = unit.figures[spotterid];
+  Figure *defender = NULL;
+  for(int i=0;i<NUMTEAMS;i++)
+  {
+    if(i!=unit.team)
+    {
+      for(int j=0;j<TEAMS[i].unitcnt;j++)
+      {
+        for(int h=0;h<MAXFIGURES;h++)
+        {
+          defender = &units[TEAMS[i].unitids[j]].figures[h];
+          angle = atan2f(spotter.position.z-defender->position.z,spotter.position.x-defender->position.z);
+          angled = fmodf(spotter.facing-angle+PI+2*PI,2*PI)-PI;
+          //if(angled<=45&&angled>=-45&&test_figure_LOS(spotter,*defender))
+          if(test_figure_LOS(spotter,*defender))
+          {
+            if(!is_spotted_figure(unit.team,defender))
+            {
+              if(do_action_spot_figure(spotter,*defender))
+              {
+                set_spotted_figure(unit.team,defender);
+                retval = 1;
+              }
+            }
+          }
+          else
+            remove_spotted_figure(unit.team,defender);
+        }
+      }
+    }
+  }
+  return retval;
+}
+
+int do_action_closecombat(Figure *attacker,Figure *defender)
+{
+//TODO
+}
+int do_action_fire(Figure attacker,Figure *defender)
+{
+  DebugLog(LOGROLLS,"do_action_fire\n");
+  int numdice = 2;
+  int *Adice = malloc(sizeof(int)*numdice);
+  Adice[0] = attacker.quality;
+  Adice[1] = attacker.FP;
+  int cover = get_cover(attacker,*defender);
+  int rangedie = get_range_die(attacker,*defender,cover);
+
+  int total;
+
+  int result = roll_die_dice(Adice,numdice,rangedie,&total);
+  switch(result)
+  {
+    case 0:
+      break;
+    case 1:
+      set_suppressed(defender);
+      break;
+    case 2:
+      set_casualty(defender,attacker.IV,cover);
+      break;
+  }
+  free(Adice);
+  return result;
+}
+int do_action_fire_position(Figure attacker,Vector3 position)
+{
+  int direction = roll_die(360);
+// inaccurate deviation?
+  int deviation = roll_die(8);
+  Vector3 finalpos = position;
+  finalpos.x += cosf(direction)*deviation;
+  finalpos.z += sinf(direction)*deviation;
+//test
+  blastpos = finalpos;
+//endtest
+// resolve
+  for(int i=0;i<NUMUNITS;i++)
+  {
+    for(int j=0;j<MAXFIGURES;j++)
+    {
+      if(test_figure_exists(units[i].figures[j]))
+      {
+        if(Vector3Distance(finalpos,units[i].figures[j].position)<attacker.FP)
+        {
+          int cover = get_cover_position(finalpos,units[i].figures[j]);
+          set_suppressed(&units[i].figures[j]);
+          set_casualty(&units[i].figures[j],attacker.IV,cover);
+        }
+      }
+    }
+  }
+  return 0;
+}
 int do_action_unpanic(Figure *figure)
 {
   int roll = roll_die(figure->quality);
@@ -346,52 +481,40 @@ int do_action_unsuppress(Figure *figure)
   }
   return 0;
 }
-int do_action_fire(Figure figure1,Figure *figure2)
-{
-  DebugLog(LOGROLLS,"do_action_fire\n");
-  int numdice = 2;
-  int *Adice = malloc(sizeof(int)*numdice);
-  Adice[0] = figure1.quality;
-  Adice[1] = figure1.FP;
-  int rangedie = get_range_die(figure1,*figure2);
-
-  int total;
-
-  int result = roll_die_dice(Adice,numdice,rangedie,&total);
-  switch(result)
-  {
-    case 0:
-      break;
-    case 1:
-      set_suppressed(figure2);
-      break;
-    case 2:
-      set_casualty(figure2,figure1.IV);
-      break;
-  }
-  free(Adice);
-  return result;
-}
 int do_action_move_in_position(Figure *figure)
 {
   int threatlevel = 2;
-  if(get_cover(*figure) > 0)
-    threatlevel = 0;
+//  if(get_cover(*figure) > 0)
+//    threatlevel = 0;
   if(test_reaction(*figure,threatlevel) == 0)
     return 0;
   figure->cover |= IN_POSITION;
   return 1;
 }
 
-int get_range_die(Figure figure1,Figure figure2)
+/*
+███████ ██  ██████  ██    ██ ██████  ███████      ██████  ███████ ████████ ███████ ███████ ████████
+██      ██ ██       ██    ██ ██   ██ ██          ██       ██         ██    ██      ██         ██
+█████   ██ ██   ███ ██    ██ ██████  █████       ██   ███ █████      ██    ███████ █████      ██
+██      ██ ██    ██ ██    ██ ██   ██ ██          ██    ██ ██         ██         ██ ██         ██
+██      ██  ██████   ██████  ██   ██ ███████      ██████  ███████    ██    ███████ ███████    ██
+*/
+Vector3 get_position_formation(Unit unit, int figureid)
+{
+    Vector3 position = Vector3Multiply(FORMATIONPOSITION[unit.formation],unit.spread*figureid);
+    Vector3Transform(&position,MatrixRotateY(unit.facing));
+    position = Vector3Add(unit.goal,position);
+    return position;
+}
+int get_range_die(Figure attacker,Figure defender,int cover)
 {
   int range_die = 4;
-  int shifts = 0;
-  float range = Vector3Distance(figure1.position,figure2.position);
-  shifts = (int)(range/figure1.quality);
+  int shifts = cover;
+  float range = Vector3Distance(attacker.position,defender.position);
+  shifts += (int)(range/attacker.quality);
+
   for(int i=0;i<shifts;i++)
     range_die += 2;
-// TODO: cover
   DebugLog(LOGINFO,"range: %f\nrange die: D%i\n",range,range_die);
   return range_die;
 }
@@ -404,15 +527,20 @@ int get_leader_id(Unit unit)
   }
   return 0;
 }
-int get_cover(Figure figure)
+int get_cover(Figure attacker, Figure defender)
 {
   int cover = 0;
-  if(figure.cover & SOFT)
+  if(defender.cover & IN_POSITION)
     cover++;
-  if(figure.cover & HARD)
+  cover += figure_in_cover_from_attacker(attacker,defender);
+  return cover;
+}
+int get_cover_position(Vector3 position, Figure defender)
+{
+  int cover = 0;
+  if(defender.cover & IN_POSITION)
     cover++;
-  if(figure.cover & IN_POSITION)
-    cover++;
+  cover += figure_in_cover_from_position(position,defender);
   return cover;
 }
 int get_figure_can_do_action(Figure figure)
@@ -426,32 +554,6 @@ int get_figure_suppressed(Figure figure)
   if((figure.flags & EXISTS)&&!(figure.flags &CASUALTY)&&!(figure.flags & PANICKED)&&!(figure.flags&SUPPRESSED))
     return 1;
   return 0;
-}
-Vector3 get_position_formation(Unit unit, int figureid)
-{
-    Vector3 position = Vector3Multiply(FORMATIONPOSITION[unit.formation],unit.spread*figureid);
-    Vector3Transform(&position,MatrixRotateY(unit.facing));
-    position = Vector3Add(unit.goal,position);
-    return position;
-}
-
-int get_unit_can_do_action(Unit unit)
-{
-  if(!unit.flags & EXISTS)
-    return 0;
-  return 1;
-}
-int get_unit_confidence(Unit unit)
-{
-  int confidence = 0;
-  for(int i=0;i<MAXFIGURES;i++)
-  {
-    if(test_figure_exists(unit.figures[i]))
-      confidence += unit.figures[i].confidence;
-  }
-  confidence = (int)(confidence/unit.figurecnt);
-  confidence += confidence%2;
-  return confidence;
 }
 
 void set_suppressed(Figure *figure)
@@ -470,10 +572,13 @@ void set_unsuppressed(Figure *figure)
     figure->flags &= ~SUPPRESSED;
   }
 }
-void set_casualty(Figure *figure, int IV)
+void set_casualty(Figure *figure, int IV,int cover)
 {
   DebugLog(LOGTEST,"set_casualty\n");
-  int result = roll_die_die(IV,figure->AT);
+  int AT = figure->AT;
+  for(int i=0;i<cover;i++)
+    AT = closedshift(AT,+1);
+  int result = roll_die_die(IV,AT);
   if(result == 1)
   {
     if(figure->flags & CASUALTY)
@@ -497,107 +602,69 @@ void set_casualty(Figure *figure, int IV)
     DebugLog(LOGTEST,"NONE\n");
 }
 
-void set_confidence(Unit *unit, int dconfidence)
+void set_spotted_figure(int teamid, Figure *defender)
 {
-  for(int i=0;i<MAXFIGURES;i++)
+  int firstempty = -1;
+  for(int i=0;i<MAXSPOTS;i++)
   {
-    if(test_figure_exists(unit->figures[i]))
-      closedshift(unit->figures[i].confidence,dconfidence);
+    if(TEAMS[teamid].spots[i] == defender)
+      break;
+    if(TEAMS[teamid].spots[i] == NULL && firstempty == -1)
+      firstempty = i;
   }
+  if(firstempty > -1)
+    TEAMS[teamid].spots[firstempty] = defender;
 }
-int set_replacement_leader(Unit *unit)
+void remove_spotted_figure(int teamid, Figure *defender)
 {
-  int highestLV = 0;
-  int newleaderid = -1;
-  for(int i=0;i<MAXFIGURES;i++)
+  for(int i=0;i<MAXSPOTS;i++)
   {
-    if(test_figure_exists(unit->figures[i]))
+    if(TEAMS[teamid].spots[i] == defender)
     {
-      if(unit->figures[i].LV > highestLV)
-      {
-        newleaderid = i;
-        highestLV = unit->figures[i].LV;
-      }
+      TEAMS[teamid].spots[i] = NULL;
+      break;
     }
   }
-  if(newleaderid >= 0)
+}
+int is_spotted_figure(int teamid,Figure *defender)
+{
+  if(!defender->flags & EXISTS)
+    return 0;
+  for(int i=0;i<MAXSPOTS;i++)
   {
-    unit->figures[newleaderid].flags |= LEADER;
-    return 1;
-  }
-  return 0;
-}
-
-int test_confidence(Figure *figure, int threatlevel)
-{
-  int result = roll_die_number(figure->quality,figure->LV+threatlevel);
-  if(result>0)
-    return figure->confidence;
-  return closedshift(figure->confidence,result-1);
-}
-int test_reaction(Figure figure, int threatlevel)
-{
-  int result = roll_die_number(figure.quality,figure.LV+threatlevel);
-  if(result>0)
-    return 1;
-  return 0;
-}
-int test_panic(Figure figure)
-{
-  int result = test_reaction(figure,0);
-  return result;
-}
-int test_figure_exists(Figure figure)
-{
-  return figure.flags & EXISTS;
-}
-
-int test_figure_LOS(Figure figure1, Figure figure2)
-{
-// TODO
-  return 1;
-}
-int test_figure_selectable(const Figure *figure1,const Figure *figure2)
-{
-  if(figure2 == NULL)
-    return 0;
-  if(!test_figure_exists(*figure2))
-    return 0;
-  if(figure2->flags & CASUALTY)
-    return 0;
-  if(!test_figure_LOS(*figure1,*figure2))
-    return 0;
-  return 1;
-}
-int test_unit_selectable(const Unit *unit1,const Unit *unit2)
-{
-  if(unit2 == NULL)
-    return 0;
-  if(!(unit2->flags & EXISTS))
-    return 0;
-  return 1;
-}
-int test_unit_LOS(Unit unit1, Unit unit2)
-{
-  for(int i=0;i<MAXFIGURES;i++)
-  {
-    for(int j=0;j<MAXFIGURES;j++)
+    if(TEAMS[teamid].spots[i] == defender)
     {
-      if(test_figure_LOS(unit1.figures[i],unit2.figures[j]))
-        return 1;
+      return 1;
     }
   }
   return 0;
 }
 
-int test_facetoface(Unit unit1,Unit unit2)
+/*
+██    ██ ███    ██ ██ ████████      ██████  ███████ ████████ ███████ ███████ ████████
+██    ██ ████   ██ ██    ██        ██       ██         ██    ██      ██         ██
+██    ██ ██ ██  ██ ██    ██        ██   ███ █████      ██    ███████ █████      ██
+██    ██ ██  ██ ██ ██    ██        ██    ██ ██         ██         ██ ██         ██
+ ██████  ██   ████ ██    ██         ██████  ███████    ██    ███████ ███████    ██
+*/
+int get_unit_can_do_action(Unit unit)
 {
-  float distance = Vector3Distance(get_unit_position(unit1),get_unit_position(unit2));
-  if(distance < FACETOFACEDISTANCE)
-    return 1;
-  return 0;
+  if(!unit.flags & EXISTS)
+    return 0;
+  return 1;
 }
-
+int get_unit_confidence(Unit unit)
+{
+  int confidence = 0;
+  for(int i=0;i<MAXFIGURES;i++)
+  {
+    if(test_figure_exists(unit.figures[i]))
+      confidence += unit.figures[i].confidence;
+  }
+  confidence = (int)(confidence/unit.figurecnt);
+  confidence += confidence%2;
+  return confidence;
+}
 Vector3 get_unit_position(Unit unit)
 {
   Vector3 position = (Vector3){0.0f,0.0f,0.0f};
@@ -675,6 +742,187 @@ Figure *get_enemy_target_figure(Unit *unit,int figureid)
   return &unittarget->figures[targetid];
 }
 
+void set_confidence(Unit *unit, int dconfidence)
+{
+  for(int i=0;i<MAXFIGURES;i++)
+  {
+    if(test_figure_exists(unit->figures[i]))
+      unit->figures[i].confidence = closedshift(unit->figures[i].confidence,dconfidence);
+  }
+}
+int set_replacement_leader(Unit *unit)
+{
+  int highestLV = 0;
+  int newleaderid = -1;
+  for(int i=0;i<MAXFIGURES;i++)
+  {
+    if(test_figure_exists(unit->figures[i]))
+    {
+      if(unit->figures[i].LV > highestLV)
+      {
+        newleaderid = i;
+        highestLV = unit->figures[i].LV;
+      }
+    }
+  }
+  if(newleaderid >= 0)
+  {
+    unit->figures[newleaderid].flags |= LEADER;
+    return 1;
+  }
+  return 0;
+}
+
+/*
+███████ ██  ██████  ██    ██ ██████  ███████     ████████ ███████ ███████ ████████ ███████
+██      ██ ██       ██    ██ ██   ██ ██             ██    ██      ██         ██    ██
+█████   ██ ██   ███ ██    ██ ██████  █████          ██    █████   ███████    ██    ███████
+██      ██ ██    ██ ██    ██ ██   ██ ██             ██    ██           ██    ██         ██
+██      ██  ██████   ██████  ██   ██ ███████        ██    ███████ ███████    ██    ███████
+*/
+int test_confidence(Figure *figure, int threatlevel)
+{
+  int result = roll_die_number(figure->quality,figure->LV+threatlevel);
+  if(result>0)
+    return figure->confidence;
+  return closedshift(figure->confidence,result-1);
+}
+int test_reaction(Figure figure, int threatlevel)
+{
+  int result = roll_die_number(figure.quality,figure.LV+threatlevel);
+  if(result>0)
+    return 1;
+  return 0;
+}
+int test_panic(Figure figure)
+{
+  int result = test_reaction(figure,0);
+  return result;
+}
+int test_figure_exists(Figure figure)
+{
+  return figure.flags & EXISTS;
+}
+int test_figure_move_finished(Figure figure)
+{
+// TODO
+}
+int test_figure_LOS(Figure figure1, Figure figure2)
+{
+  if(!(figure1.flags&EXISTS) || !(figure2.flags&EXISTS))
+    return 0;
+  int los = get_map_line_value(get_tile_xy_at(figure1.position),get_tile_xy_at(figure2.position),VISIBLE);
+  if(los > 0)
+    return 0;
+  return 1;
+}
+int test_figure_selectable(const Figure *figure1,const Figure *figure2)
+{
+  if(figure2 == NULL)
+    return 0;
+  if(!test_figure_exists(*figure2))
+    return 0;
+  if(figure2->flags & CASUALTY)
+    return 0;
+  if(!test_figure_LOS(*figure1,*figure2))
+    return 0;
+  return 1;
+}
+int figure_in_cover_from_attacker(Figure attacker,Figure defender)
+{
+  Vector3 maxcoverpos = Vector3Subtract(attacker.position,defender.position);
+  Vector3Normalize(&maxcoverpos);
+  maxcoverpos = Vector3Multiply(maxcoverpos,COVERDISTANCE);
+  maxcoverpos = Vector3Add(maxcoverpos,defender.position);
+  return get_map_line_value(get_tile_xy_at(defender.position),get_tile_xy_at(maxcoverpos),COVER);
+}
+int figure_in_cover_from_position(Vector3 position,Figure defender)
+{
+  Vector3 maxcoverpos = Vector3Subtract(position,defender.position);
+  Vector3Normalize(&maxcoverpos);
+  maxcoverpos = Vector3Multiply(maxcoverpos,COVERDISTANCE);
+  maxcoverpos = Vector3Add(maxcoverpos,defender.position);
+  return get_map_line_value(get_tile_xy_at(defender.position),get_tile_xy_at(maxcoverpos),COVER);
+}
+
+/*
+██    ██ ███    ██ ██ ████████     ████████ ███████ ███████ ████████ ███████
+██    ██ ████   ██ ██    ██           ██    ██      ██         ██    ██
+██    ██ ██ ██  ██ ██    ██           ██    █████   ███████    ██    ███████
+██    ██ ██  ██ ██ ██    ██           ██    ██           ██    ██         ██
+ ██████  ██   ████ ██    ██           ██    ███████ ███████    ██    ███████
+*/
+int test_unit_selectable(const Unit *unit1,const Unit *unit2)
+{
+  if(unit2 == NULL)
+    return 0;
+  if(!(unit2->flags & EXISTS))
+    return 0;
+  return 1;
+}
+int test_unit_LOS(Unit unit1, Unit unit2)
+{
+  for(int i=0;i<MAXFIGURES;i++)
+  {
+    for(int j=0;j<MAXFIGURES;j++)
+    {
+      if(test_figure_LOS(unit1.figures[i],unit2.figures[j]))
+        return 1;
+    }
+  }
+  return 0;
+}
+int test_unit_action_finished(Unit unit)
+{
+// TODO
+}
+int test_communicate(Unit unit1,Unit unit2)
+{
+  DebugLog(LOGROLLS,"test_communicate\n");
+  if(test_facetoface(unit1,unit2))
+  {
+    DebugLog(LOGROLLS,"face to face: success\n");
+    return 1;
+  }
+  int leaderid1 = get_leader_id(unit1);
+  int leaderid2 = get_leader_id(unit2);
+  int lowestLV = unit1.figures[leaderid1].LV;
+  if(lowestLV > unit2.figures[leaderid2].LV)
+  {
+    lowestLV = unit2.figures[leaderid2].LV;
+    DebugLog(LOGROLLS,"Unit 2 LV lower\n");
+  }
+  else
+    DebugLog(LOGROLLS,"Unit 1 LV lower\n");
+  int commandleveldiff = abs(unit1.commandlevel - unit2.commandlevel -1);
+  DebugLog(LOGROLLS,"command level difference: %i\n",commandleveldiff);
+  if(commandleveldiff>0)
+    lowestLV = closedshift(lowestLV,commandleveldiff);
+
+  int result = roll_die_number(unit1.figures[leaderid1].quality,lowestLV);
+  if(result > 0)
+  {
+    DebugLog(LOGROLLS,"success\n");
+    return 1;
+  }
+  DebugLog(LOGROLLS,"failure\n");
+  return 0;
+}
+int test_facetoface(Unit unit1,Unit unit2)
+{
+  float distance = Vector3Distance(get_unit_position(unit1),get_unit_position(unit2));
+  if(distance < FACETOFACEDISTANCE)
+    return 1;
+  return 0;
+}
+
+/*
+██████  ██████  ██ ███    ██ ████████ ███████
+██   ██ ██   ██ ██ ████   ██    ██    ██
+██████  ██████  ██ ██ ██  ██    ██    ███████
+██      ██   ██ ██ ██  ██ ██    ██         ██
+██      ██   ██ ██ ██   ████    ██    ███████
+*/
 void print_unit(Unit unit)
 {
   if(!(unit.flags & EXISTS))
@@ -719,12 +967,13 @@ void print_teams()
 {
   for(int i=0;i<NUMTEAMS;i++)
   {
-    printf("team: %i\n",i+1);
+    printf("team: %i\n",i);
     printf("ids: ");
-    for(int j=0;j<TEAMIDS[i][0];j++)
-    {
-      printf("%i,",TEAMIDS[i][j+1]);
-    }
+    for(int j=0;j<TEAMS[i].unitcnt;j++)
+      printf("%i, ",TEAMS[i].unitids[j]);
+    printf("\nspots: ");
+    for(int j=0;j<MAXSPOTS;j++)
+      printf("%i, ",TEAMS[i].spots[j]);
     printf("\n");
   }
 }
@@ -745,127 +994,14 @@ void print_weaponstable()
     }
   }
 }
-Terraintile **read_map_file(const char *mapfile,const char *terrainfile)
-{
-// map
-  Terraintile **map;
-  FILE *file = fopen(mapfile,"r");
-  char in[25];
-  int x = 0;
-  int y = 0;
-  fscanf(file,"%i,%i\n",&MAPWIDTH,&MAPHEIGHT);
-  map = malloc(sizeof(Terraintile)*MAPHEIGHT);
-  for(int i=0;i<MAPWIDTH;i++)
-    map[i] = malloc(sizeof(Terraintile)*MAPWIDTH);
-  while(!feof(file))
-  {
-    fscanf(file,"%s\n",in);
-    if(strcmp("}",in) == 0)
-    {
-      y++;
-      x = 0;
-    }
-    else
-    {
-      if(strcmp("{",in) != 0)
-      {
-        map[x][y].x = x;
-        map[x][y].y = y;
-        sscanf(in,"%i\n",&map[x][y].type);
-        x++;
-      }
-    }
-  }
-  fclose(file);
-// TERRAINTILES
-  int tileid = 0;
-  int hasvalue = 0;
-  file = fopen(terrainfile,"r");
-  while(!feof(file))
-  {
-    fscanf(file,"%s\n",in);
-    if(strcmp(in,"}") == 0)
-      tileid++;
-    if(strcmp(in,"model:") == 0)
-    {
-      char *path;
-      fscanf(file,"%s\n",in);
-// 11 = length of "resources/"
-      path = malloc(sizeof(char) * (strlen(in)+11));
-      strcpy(path,"resources/");
-      strcat(path,in);
-      TERRAINTILES[tileid].model = LoadModel(path);
-      free(path);
-    }
-    if(strcmp(in,"cover:") == 0)
-    {
-      for(int i=0;i<TILERES;i++)
-      {
-        for(int j=0;j<TILERES-1;j++)
-        {
-          fscanf(file,"%i ",&hasvalue);
-          TERRAINTILES[tileid].tile[i][j].cover = hasvalue;
-          TERRAINTILES[tileid].tilecover += hasvalue;
-        }
-        fscanf(file,"%i\n",&hasvalue);
-          TERRAINTILES[tileid].tile[i][TILERES-1].cover = hasvalue;
-        TERRAINTILES[tileid].tilecover += hasvalue;
-      }
-    }
-    if(strcmp(in,"visible:") == 0)
-    {
-      for(int i=0;i<TILERES;i++)
-      {
-        for(int j=0;j<TILERES-1;j++)
-        {
-          fscanf(file,"%i ",&hasvalue);
-          TERRAINTILES[tileid].tile[i][j].visible = hasvalue;
-          TERRAINTILES[tileid].tilevisible += hasvalue;
-        }
-        fscanf(file,"%i\n",&hasvalue);
-        TERRAINTILES[tileid].tile[i][TILERES-1].visible = hasvalue;
-        TERRAINTILES[tileid].tilevisible += hasvalue;
-      }
-    }
-    if(strcmp(in,"walkable:") == 0)
-    {
-      for(int i=0;i<TILERES;i++)
-      {
-        for(int j=0;j<TILERES-1;j++)
-        {
-          fscanf(file,"%i ",&hasvalue);
-          TERRAINTILES[tileid].tile[i][j].walkable = hasvalue;
-          TERRAINTILES[tileid].tilewalkable += hasvalue;
-        }
-        fscanf(file,"%i\n",&hasvalue);
-        TERRAINTILES[tileid].tile[i][TILERES-1].walkable = hasvalue;
-        TERRAINTILES[tileid].tilewalkable += hasvalue;
-      }
-    }
-  }
-  fclose(file);
-  return map;
-}
-void map_draw()
-{
-  for(int y=0;y<MAPHEIGHT;y++)
-  {
-    for(int x=0;x<MAPWIDTH;x++)
-    {
-      DrawModel(TERRAINTILES[MAP[x][y].type].model,(Vector3){x*TERRAINRES,0.0f,y*TERRAINRES,},1.0f,BROWN);
-    }
-  }
-}
-Tile get_tile_at(Vector3 position)
-{
-  int mx = position.x/10;
-  int my = position.z/10;
-  int tx = (int)(position.x)%10;
-  int ty = (int)(position.z)%10;
-  printf("%i,%i\n",tx+(mx*10),ty+(my*10));
-  return TERRAINTILES[MAP[mx][my].type].tile[tx][ty];
-}
 
+/*
+██████  ███████  █████  ██████  ███████
+██   ██ ██      ██   ██ ██   ██ ██
+██████  █████   ███████ ██   ██ ███████
+██   ██ ██      ██   ██ ██   ██      ██
+██   ██ ███████ ██   ██ ██████  ███████
+*/
 Unit* read_units_file(const char *filename)
 {
   FILE *file = fopen(filename,"r");
@@ -888,7 +1024,13 @@ Unit* read_units_file(const char *filename)
     if(strcmp("teamcnt",varname) == 0)
     {
       NUMTEAMS = atoi(varvalue);
-      TEAMIDS = malloc(sizeof(int*) * NUMTEAMS);
+      TEAMS = malloc(sizeof(Team)*NUMTEAMS);
+      for(int i=0;i<NUMTEAMS;i++)
+      {
+        TEAMS[i].spots = malloc(sizeof(Figure*)*MAXSPOTS);
+        for(int j=0;j<MAXSPOTS;j++)
+          TEAMS[i].spots[j] = 0;
+      }
       teamcounter = malloc(sizeof(int) * NUMTEAMS);
       for(int i=0;i<NUMTEAMS;i++)
         teamcounter[i] = 0;
@@ -898,8 +1040,8 @@ Unit* read_units_file(const char *filename)
       int teamnr;
       int unitcnt;
       sscanf(varvalue,"%i,%i",&teamnr,&unitcnt);
-      TEAMIDS[teamnr-1] = malloc(sizeof(int) * (unitcnt + 1));
-      TEAMIDS[teamnr-1][0] = unitcnt;
+      TEAMS[teamnr-1].unitids = malloc(sizeof(int)*(unitcnt));
+      TEAMS[teamnr-1].unitcnt = unitcnt;
     }
 
     if(strcmp("unit",varname) == 0)
@@ -920,10 +1062,10 @@ Unit* read_units_file(const char *filename)
     }
     if(strcmp("team",varname) == 0)
     {
-      int teamnr = atoi(varvalue);
+      int teamnr = atoi(varvalue) -1;
       units[unitid].team = teamnr;
-      teamcounter[teamnr-1]++;
-      TEAMIDS[teamnr-1][teamcounter[teamnr-1]] = unitid;
+      TEAMS[teamnr].unitids[teamcounter[teamnr]] = unitid;
+      teamcounter[teamnr]++;
     }
     if(strcmp("uname",varname) == 0)
     {
@@ -944,6 +1086,7 @@ Unit* read_units_file(const char *filename)
       Vector3 relposition = Vector3Multiply(FORMATIONPOSITION[units[unitid].formation],figureid*units[unitid].spread);
       Vector3 finalpos = Vector3Add(units[unitid].goal,relposition);
       units[unitid].figures[figureid].position = finalpos;
+      units[unitid].figures[figureid].spottingtimer = unitid*100 + figureid*10;
     }
     if(strcmp("fname",varname) == 0)
     {
@@ -951,11 +1094,11 @@ Unit* read_units_file(const char *filename)
     }
     if(strcmp("weapon",varname) == 0)
     {
-      units[unitid].figures[figureid].weapon = atoi(varvalue);
-      units[unitid].figures[figureid].FP = WEAPONTABLE[atoi(varvalue)].FP;
-      units[unitid].figures[figureid].IV = WEAPONTABLE[atoi(varvalue)].IV;
-      units[unitid].figures[figureid].wflags = WEAPONTABLE[atoi(varvalue)].flags;
-      units[unitid].figures[figureid].burst = WEAPONTABLE[atoi(varvalue)].burst;
+      units[unitid].figures[figureid].weapon = atoi(varvalue)-1;
+      units[unitid].figures[figureid].FP = WEAPONTABLE[atoi(varvalue)-1].FP;
+      units[unitid].figures[figureid].IV = WEAPONTABLE[atoi(varvalue)-1].IV;
+      units[unitid].figures[figureid].wflags = WEAPONTABLE[atoi(varvalue)-1].flags;
+      units[unitid].figures[figureid].burst = WEAPONTABLE[atoi(varvalue)-1].burst;
     }
     if(strcmp("ammo",varname) == 0)
       units[unitid].figures[figureid].ammo = atoi(varvalue);
@@ -976,7 +1119,6 @@ Unit* read_units_file(const char *filename)
   free(teamcounter);
   return units;
 }
-
 void read_weapontable_file(const char *filename)
 {
   FILE *file = fopen(filename,"r");
@@ -1014,7 +1156,116 @@ void read_weapontable_file(const char *filename)
   }
   fclose(file);
 }
+Terraintile **read_map_file(const char *mapfile,const char *terrainfile)
+{
+// map
+  Terraintile **map;
+  FILE *file = fopen(mapfile,"r");
+  char in[25];
+  fscanf(file,"%i,%i\n",&MAPWIDTH,&MAPHEIGHT);
+  map = malloc(sizeof(Terraintile)*MAPHEIGHT);
+  for(int i=0;i<MAPWIDTH;i++)
+    map[i] = malloc(sizeof(Terraintile)*MAPWIDTH);
+  while(!feof(file))
+  {
+    for(int y=0;y<MAPHEIGHT;y++)
+    {
+      for(int x=0;x<MAPWIDTH-1;x++)
+      {
+        fscanf(file,"%i,",&map[x][y].type);
+      }
+      fscanf(file,"%i\n",&map[MAPWIDTH-1][y].type);
+    }
+  }
+  fclose(file);
+// TERRAINTILES
+  int tileid = 0;
+  int hasvalue = 0;
+  file = fopen(terrainfile,"r");
+  while(!feof(file))
+  {
+    fscanf(file,"%s\n",in);
+    if(strcmp(in,"}") == 0)
+      tileid++;
+    if(strcmp(in,"model:") == 0)
+    {
+      char *path;
+      fscanf(file,"%s\n",in);
+// 11 = length of "resources/"
+      path = malloc(sizeof(char) * (strlen(in)+11));
+      strcpy(path,"resources/");
+      strcat(path,in);
+      TERRAINTILES[tileid].model = LoadModel(path);
+      free(path);
+    }
+    if(strcmp(in,"texture:") == 0)
+    {
+      char *path;
+      fscanf(file,"%s\n",in);
+// 11 = length of "resources/"
+      path = malloc(sizeof(char) * (strlen(in)+11));
+      strcpy(path,"resources/");
+      strcat(path,in);
+      TERRAINTILES[tileid].model.material.maps[MAP_DIFFUSE].texture = LoadTexture(path);
+      free(path);
+    }
+    if(strcmp(in,"cover:") == 0)
+    {
+      for(int y=0;y<TILERES;y++)
+      {
+        for(int x=0;x<TILERES-1;x++)
+        {
+          fscanf(file,"%i ",&hasvalue);
+          TERRAINTILES[tileid].tile[x][y].cover = hasvalue;
+          TERRAINTILES[tileid].tilecover += hasvalue;
+        }
+        fscanf(file,"%i\n",&hasvalue);
+        TERRAINTILES[tileid].tile[TILERES-1][y].cover = hasvalue;
+        TERRAINTILES[tileid].tilecover += hasvalue;
+      }
+    }
+    if(strcmp(in,"visible:") == 0)
+    {
+      for(int y=0;y<TILERES;y++)
+      {
+        for(int x=0;x<TILERES-1;x++)
+        {
+          fscanf(file,"%i ",&hasvalue);
+          TERRAINTILES[tileid].tile[x][y].visible = hasvalue;
+          TERRAINTILES[tileid].tilevisible += hasvalue;
+        }
+        fscanf(file,"%i\n",&hasvalue);
+        TERRAINTILES[tileid].tile[TILERES-1][y].visible = hasvalue;
+        TERRAINTILES[tileid].tilevisible += hasvalue;
+      }
+    }
+    if(strcmp(in,"walkable:") == 0)
+    {
+      for(int y=0;y<TILERES;y++)
+      {
+        for(int x=0;x<TILERES-1;x++)
+        {
+          fscanf(file,"%i ",&hasvalue);
+          TERRAINTILES[tileid].tile[x][y].walkable = hasvalue;
+          TERRAINTILES[tileid].tilewalkable += hasvalue;
+        }
+        fscanf(file,"%i\n",&hasvalue);
+        TERRAINTILES[tileid].tile[TILERES-1][y].walkable = hasvalue;
+        TERRAINTILES[tileid].tilewalkable += hasvalue;
+      }
+    }
+  }
+  fclose(file);
+  return map;
+}
 
+/*
+███████ ████████ ██████  ██ ███    ██  ██████  ███████
+██         ██    ██   ██ ██ ████   ██ ██       ██
+███████    ██    ██████  ██ ██ ██  ██ ██   ███ ███████
+     ██    ██    ██   ██ ██ ██  ██ ██ ██    ██      ██
+███████    ██    ██   ██ ██ ██   ████  ██████  ███████
+*/
 Vector3 string_to_pos(const char *string)
 {
   Vector3 position;
@@ -1116,6 +1367,10 @@ int flag_string_to_int(const char *string)
       flags |= TERROR;
     if(strcmp("LEADER",tok) == 0)
       flags |= LEADER;
+    if(strcmp("HEAVY",tok) == 0)
+      flags |= HEAVY;
+    if(strcmp("BLAST",tok) == 0)
+      flags |= BLAST;
     tok = strtok(NULL,",");
   }
   return flags;
@@ -1310,15 +1565,10 @@ void flags_to_string(char *out,int flags)
     strcat(out,"TERROR,");
   if(flags & LEADER)
     strcat(out,"LEADER,");
-}
-void flags_to_role(char *out,int uflags,int wflags)
-{
-  if(uflags & LEADER)
-    strcpy(out,"leader");
-  else if(wflags & SUPPORT)
-    strcpy(out,"gunner");
-  else
-    strcpy(out,"soldier");
+  if(flags & HEAVY)
+    strcat(out,"HEAVY,");
+  if(flags & BLAST)
+    strcat(out,"BLAST,");
 }
 void flags_to_status(char *out,int flags)
 {
@@ -1333,7 +1583,36 @@ void flags_to_status(char *out,int flags)
   else
     strcpy(out,"healthy");
 }
+void flags_to_role(char *out,int uflags,int wflags)
+{
+  if(uflags & LEADER)
+    strcpy(out,"leader");
+  else if(wflags & SUPPORT)
+    strcpy(out,"gunner");
+  else
+    strcpy(out,"soldier");
+}
+void loglevel_to_string(char *out,int loglvl)
+{
+  if(loglvl & LOGROLLS)
+    strcpy(out,"ROLL: ");
+  if(loglvl & LOGACTIONS)
+    strcpy(out,"ACTION: ");
+  if(loglvl & LOGCONTROLS)
+    strcpy(out,"CONTROL: ");
+  if(loglvl & LOGINFO)
+    strcpy(out,"INFO: ");
+  if(loglvl & LOGTEST)
+    strcpy(out,"TEST: ");
+}
 
+/*
+██████   █████  ██    ██ ██      ██ ██████
+██   ██ ██   ██  ██  ██  ██      ██ ██   ██
+██████  ███████   ████   ██      ██ ██████
+██   ██ ██   ██    ██    ██      ██ ██   ██
+██   ██ ██   ██    ██    ███████ ██ ██████
+*/
 void raylib_init()
 {
   SCREENHEIGHT = 800;
@@ -1373,7 +1652,6 @@ void raylib_init_models(Unit *units)
       }
     }
   }
-  TERRAINTILES[TERRAIN_FLAT].model = LoadModel("resources/terrain_flat.obj");
 }
 void raylib_free_models(Unit *units)
 {
@@ -1390,55 +1668,177 @@ void raylib_free_models(Unit *units)
     }
   }
   for(int i=0;i<NUMTERRAINTYPES;i++)
+  {
+    UnloadTexture(TERRAINTILES[i].model.material.maps[MAP_DIFFUSE].texture);
     UnloadModel(TERRAINTILES[i].model);
+  }
 }
 
-Rectangle ui_clamp_icon_rectangle(Rectangle rectangle)
+void raylib_draw(Unit *units,Camera *camera)
 {
-  Rectangle clamped = rectangle;
-  if(clamped.x < 0)
-    clamped.x = 0;
-  if(clamped.x > SCREENWIDTH-TYPEWIDTH)
-    clamped.x = SCREENWIDTH-TYPEWIDTH;
-  if(clamped.y < 0)
-    clamped.y = 0;
-  if(clamped.y > SCREENHEIGHT-TYPEHEIGHT)
-    clamped.y = SCREENHEIGHT-TYPEHEIGHT;
-  return clamped;
-}
-Rectangle ui_get_icon_rectangle(Unit unit,Camera camera)
-{
-  Vector2 position2;
-  Rectangle iconrectangle;
-  Vector3 position3 = (Vector3){0.0f,0.0f,0.0f};
-  int figurecnt = 0;
-  for(int i=0;i<MAXFIGURES;i++)
-  {
-    if(test_figure_exists(unit.figures[i]))
-    {
-      if(!(unit.figures[i].flags & CASUALTY))
+  UpdateCamera(camera);
+  BeginDrawing();
+    ClearBackground(RAYWHITE);
+    Begin3dMode(*camera);
+// figures
+      Color unitcolor;
+      for(int i=0;i<NUMUNITS;i++)
       {
-        position3 = Vector3Add(position3,unit.figures[i].position);
-        figurecnt++;
+        if(units[i].flags & EXISTS)
+        {
+          switch(units[i].team)
+          {
+            case 0:
+              unitcolor = BLUE;
+              break;
+            default:
+              unitcolor = RED;
+              break;
+          }
+// goal
+          DrawCube(units[i].goal, 0.5f, 0.5f, 0.5f, RAYGREEN);
+// test
+DrawModel(blastmarker,blastpos,1.0f,ORANGE);
+drawprojectiles();
+// endtest
+
+          for(int j=0;j<MAXFIGURES;j++)
+          {
+            if(test_figure_exists(units[i].figures[j]))
+            {
+              if(units[i].team!=PLAYERTEAM)
+              {
+                if(!is_spotted_figure(PLAYERTEAM,&units[i].figures[j]))
+                  unitcolor = GRAY;
+              }
+              DrawModel(units[i].figures[j].model,units[i].figures[j].position,1.0f,unitcolor);
+            }
+          }
+        }
       }
+    map_draw();
+    End3dMode();
+    ui_draw(*camera);
+// icons
+    ui_draw_unit_icons(units,*camera);
+    ui_draw_selected_summary();
+  EndDrawing();
+}
+void raylib_input(Unit *units,Camera camera)
+{
+
+  if(IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+  {
+    Unit *unittarget = NULL;
+    Vector3 positiontarget;
+    switch(CURRENTCOMMAND)
+    {
+      case COMMAND_FIRE:
+        unittarget = ui_select_unit(units);
+        if(selected)
+        {
+          if(unittarget)
+            command_fire(selected,unittarget);
+        }
+        break;
+      case COMMAND_MOVE:
+        if(selected)
+        {
+          positiontarget = raylib_select_position(camera);
+          command_move(selected,positiontarget);
+        }
+        break;
+      case COMMAND_IDLE:
+        unittarget = ui_select_unit(units);
+        if(unittarget)
+          selected = unittarget;
+        break;
+      case COMMAND_TEST:
+        if(selected)
+          do_action_spot(*selected, 0);
+        break;
+    }
+    CURRENTCOMMAND = COMMAND_IDLE;
+  }
+  if(IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
+  {
+    CURRENTCOMMAND = COMMAND_IDLE;
+  }
+  if(IsKeyReleased(CONTROL_FIRE))
+  {
+    if(selected)
+    {
+      CURRENTCOMMAND = COMMAND_FIRE;
     }
   }
-  if(figurecnt > 0)
+  if(IsKeyReleased(CONTROL_TEST))
   {
-    position3.x /= figurecnt;
-    position3.y /= figurecnt;
-    position3.z /= figurecnt;
+    if(selected)
+    {
+      CURRENTCOMMAND = COMMAND_TEST;
+      addprojectile(selected->figures[0].position,(Vector3){0.0f,0.0f,0.0f},0);
+    }
   }
-  else
-    position3 = unit.figures[0].position;
-  position2 = GetWorldToScreen(position3,camera);
-  iconrectangle.x = position2.x;
-  iconrectangle.y = position2.y;
-  iconrectangle.width = TYPEWIDTH;
-  iconrectangle.height = TYPEHEIGHT;
-  iconrectangle = ui_clamp_icon_rectangle(iconrectangle);
-  return iconrectangle;
+  if(IsKeyReleased(CONTROL_TEST_2))
+  {
+    Vector3 terrainhit = raylib_select_position(camera);
+    Vector2 pos = get_tile_xy_at(terrainhit);
+  }
+  if(IsKeyReleased(CONTROL_MOVE))
+  {
+    if(selected)
+    {
+      CURRENTCOMMAND = COMMAND_MOVE;
+    }
+  }
 }
+void raylib_end()
+{
+  CloseWindow();
+}
+
+/*
+██    ██ ██
+██    ██ ██
+██    ██ ██
+██    ██ ██
+ ██████  ██
+*/
+void ui_init()
+{
+  UNIT_ICON_RECTANGLES = malloc(sizeof(Rectangle)*NUMUNITS);
+}
+void ui_draw(Camera camera)
+{
+// target line
+  if(selected)
+  {
+    if(CURRENTCOMMAND != COMMAND_IDLE)
+    {
+      Color linecolor = RAYWHITE;
+      switch(CURRENTCOMMAND)
+      {
+        case COMMAND_FIRE:
+          linecolor = RED;
+          break;
+        case COMMAND_MOVE:
+          linecolor = BLUE;
+          break;
+        case COMMAND_TEST:
+          linecolor = PURPLE;
+          break;
+      }
+      Rectangle unitrectangle = ui_get_icon_rectangle(*selected,camera);
+      Vector2 unitposition = (Vector2){unitrectangle.x+(unitrectangle.width/2),unitrectangle.y+(unitrectangle.height/2)};
+      DrawLineEx(unitposition,GetMousePosition(),5.0f,linecolor);
+    }
+  }
+}
+void ui_end()
+{
+  free(UNIT_ICON_RECTANGLES);
+}
+
 void ui_draw_unit_icons(Unit *units,Camera camera)
 {
   for(int i=0;i<NUMUNITS;i++)
@@ -1449,17 +1849,14 @@ void ui_draw_unit_icons(Unit *units,Camera camera)
       Color unitcolor;
       switch(units[i].team)
       {
-        case 1:
+        case 0:
           unitcolor = BLUE;
           break;
-        case 2:
+        case 1:
           unitcolor = RED;
           break;
       }
-//      for(int j=0;j<i;j++)
-//      {
         DrawTexture(TEXTURES[TEXTURE_TYPES],UNIT_ICON_RECTANGLES[i].x,UNIT_ICON_RECTANGLES[i].y,unitcolor);
-//      }
     }
   }
 }
@@ -1467,18 +1864,6 @@ void ui_draw_selected_summary()
 {
   if(selected)
   {
-/*
-to be shown in summary:
-unit:
-  name
-  commandlevel
-  some flags
-figure:
-  name
-  figure actions
-  some flags
-  confidence
-*/
     int offsetx = 0;
     int offsety = 0;
     char out[25];
@@ -1541,6 +1926,53 @@ figure:
   }
 }
 
+Rectangle ui_clamp_icon_rectangle(Rectangle rectangle)
+{
+  Rectangle clamped = rectangle;
+  if(clamped.x < 0)
+    clamped.x = 0;
+  if(clamped.x > SCREENWIDTH-TYPEWIDTH)
+    clamped.x = SCREENWIDTH-TYPEWIDTH;
+  if(clamped.y < 0)
+    clamped.y = 0;
+  if(clamped.y > SCREENHEIGHT-TYPEHEIGHT)
+    clamped.y = SCREENHEIGHT-TYPEHEIGHT;
+  return clamped;
+}
+Rectangle ui_get_icon_rectangle(Unit unit,Camera camera)
+{
+  Vector2 position2;
+  Rectangle iconrectangle;
+  Vector3 position3 = (Vector3){0.0f,0.0f,0.0f};
+  int figurecnt = 0;
+  for(int i=0;i<MAXFIGURES;i++)
+  {
+    if(test_figure_exists(unit.figures[i]))
+    {
+      if(!(unit.figures[i].flags & CASUALTY))
+      {
+        position3 = Vector3Add(position3,unit.figures[i].position);
+        figurecnt++;
+      }
+    }
+  }
+  if(figurecnt > 0)
+  {
+    position3.x /= figurecnt;
+    position3.y /= figurecnt;
+    position3.z /= figurecnt;
+  }
+  else
+    position3 = unit.figures[0].position;
+  position2 = GetWorldToScreen(position3,camera);
+  iconrectangle.x = position2.x;
+  iconrectangle.y = position2.y;
+  iconrectangle.width = TYPEWIDTH;
+  iconrectangle.height = TYPEHEIGHT;
+  iconrectangle = ui_clamp_icon_rectangle(iconrectangle);
+  return iconrectangle;
+}
+
 Unit *ui_select_unit(Unit *units)
 {
   Unit *out = NULL;
@@ -1569,29 +2001,6 @@ Vector3 raylib_select_position(Camera camera)
   {
     for(int x=0;x<MAPWIDTH;x++)
     {
-/*
-1  3
-4  2
-
-0,0
-  10,10
-1
-(x*TERRAINRES)
-(y*TERRAINRES)
-z=0
-2
-(x*TERRAINRES)+TERRAINRES
-(y*TERRAINRES)+TERRAINRES
-z=0
-3
-(x*TERRAINRES)
-(y*TERRAINRES)+TERRAINRES
-z=0
-4
-(x*TERRAINRES)+TERRAINRES
-(y*TERRAINRES)
-z=0
-*/
       p1 = (Vector3){(x*TERRAINRES),0.0f,(y*TERRAINRES)};
       p2 = (Vector3){(x*TERRAINRES),0.0f,(y*TERRAINRES)+TERRAINRES};
       p3 = (Vector3){(x*TERRAINRES)+TERRAINRES,0.0f,(y*TERRAINRES)+TERRAINRES};
@@ -1613,141 +2022,91 @@ z=0
   return (Vector3){0.0f,0.0f,0.0f};
 }
 
-void ui_init()
+/*
+███    ███  █████  ██████
+████  ████ ██   ██ ██   ██
+██ ████ ██ ███████ ██████
+██  ██  ██ ██   ██ ██
+██      ██ ██   ██ ██
+*/
+void map_draw()
 {
-  UNIT_ICON_RECTANGLES = malloc(sizeof(Rectangle)*NUMUNITS);
-}
-void ui_draw(Camera camera)
-{
-// target line
-  if(selected)
+  for(int y=0;y<MAPHEIGHT;y++)
   {
-    if(CURRENTCOMMAND != COMMAND_IDLE)
+    for(int x=0;x<MAPWIDTH;x++)
     {
-      Color linecolor = RAYWHITE;
-      switch(CURRENTCOMMAND)
-      {
-        case COMMAND_FIRE:
-          linecolor = RED;
-          break;
-        case COMMAND_MOVE:
-          linecolor = BLUE;
-          break;
-      }
-      Rectangle unitrectangle = ui_get_icon_rectangle(*selected,camera);
-      Vector2 unitposition = (Vector2){unitrectangle.x+(unitrectangle.width/2),unitrectangle.y+(unitrectangle.height/2)};
-      DrawLineEx(unitposition,GetMousePosition(),5.0f,linecolor);
+      DrawModel(TERRAINTILES[MAP[x][y].type].model,(Vector3){x*TERRAINRES,0.0f,y*TERRAINRES,},1.0f,WHITE);
     }
   }
 }
-void ui_end()
+Vector2 get_tile_xy_at(Vector3 position)
 {
-  free(UNIT_ICON_RECTANGLES);
+  int mx = position.x/10;
+  int my = position.z/10;
+  int tx = (int)(position.x)%10;
+  int ty = (int)(position.z)%10;
+  return (Vector2){mx*10+tx,my*10+ty};
 }
-void raylib_draw(Unit *units,Camera *camera)
+int get_map_line_value(Vector2 start,Vector2 end,int value)
 {
-  UpdateCamera(camera);
-  BeginDrawing();
-    ClearBackground(RAYWHITE);
-    Begin3dMode(*camera);
-// figures
-      Color unitcolor;
-      for(int i=0;i<NUMUNITS;i++)
-      {
-        if(units[i].flags & EXISTS)
-        {
-          switch(units[i].team)
-          {
-            case 1:
-              unitcolor = BLUE;
-              break;
-            case 2:
-              unitcolor = RED;
-              break;
-          }
-// goal
-          DrawCube(units[i].goal, 0.5f, 0.5f, 0.5f, RAYGREEN);
-          for(int j=0;j<MAXFIGURES;j++)
-          {
-            if(test_figure_exists(units[i].figures[j]))
-            {
-              DrawModel(units[i].figures[j].model,units[i].figures[j].position,1.0f,unitcolor);
-            }
-          }
-        }
-      }
-    map_draw();
-    End3dMode();
-    ui_draw(*camera);
-// icons
-    ui_draw_unit_icons(units,*camera);
-    ui_draw_selected_summary();
-  EndDrawing();
-}
-
-void raylib_end()
-{
-  CloseWindow();
-}
-void raylib_input(Unit *units,Camera camera)
-{
-
-  if(IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
+  DebugLog(LOGINFO,"startx:%i,starty:%i\n",(int)start.x,(int)start.y);
+  DebugLog(LOGINFO,"endx:%i,endy:%i\n",(int)end.x,(int)end.y);
+  int retval = 0;
+  int dx = abs(end.x-start.x);
+  int sx = start.x<end.x ? 1 : -1;
+  int dy = abs(end.y-start.y);
+  int sy = start.y<end.y ? 1 : -1;
+  int err = (dx>dy ? dx: -dy)/2;
+  int err2;
+  for(;;)
   {
-    Unit *unittarget = NULL;
-    Vector3 positiontarget;
-    switch(CURRENTCOMMAND)
+// value
+    int mx = start.x/10;
+    int my = start.y/10;
+    int tx = (int)(start.x)%10;
+    int ty = (int)(start.y)%10;
+    switch(value)
     {
-      case COMMAND_FIRE:
-        unittarget = ui_select_unit(units);
-        if(selected)
-        {
-          if(unittarget)
-            command_fire(selected,unittarget);
-        }
+      case COVER:
+        retval += TERRAINTILES[MAP[mx][my].type].tile[tx][ty].cover;
         break;
-      case COMMAND_MOVE:
-        if(selected)
-        {
-          positiontarget = raylib_select_position(camera);
-          command_move(selected,positiontarget);
-        }
+      case VISIBLE:
+        retval += TERRAINTILES[MAP[mx][my].type].tile[tx][ty].visible;
         break;
-      case COMMAND_IDLE:
-        unittarget = ui_select_unit(units);
-        if(unittarget)
-          selected = unittarget;
+      case WALKABLE:
+        retval += TERRAINTILES[MAP[mx][my].type].tile[tx][ty].walkable;
         break;
     }
-    CURRENTCOMMAND = COMMAND_IDLE;
-  }
-  if(IsMouseButtonReleased(MOUSE_RIGHT_BUTTON))
-  {
-    CURRENTCOMMAND = COMMAND_IDLE;
-  }
-  if(IsKeyReleased(CONTROL_FIRE))
-  {
-    if(selected)
+
+    if(start.x==end.x && start.y==end.y)
+      break;
+    err2 = err;
+    if(err2 > -dx)
     {
-      CURRENTCOMMAND = COMMAND_FIRE;
+      err -= dy;
+      start.x += sx;
+    }
+    if(err2 < dy)
+    {
+      err += dx;
+      start.y += sy;
     }
   }
-  if(IsKeyReleased(CONTROL_TEST))
-  {
-    Vector3 terrainhit = raylib_select_position(camera);
-    get_tile_at(terrainhit);
-  }
-  if(IsKeyReleased(CONTROL_MOVE))
-  {
-    if(selected)
-    {
-      CURRENTCOMMAND = COMMAND_MOVE;
-    }
-  }
+  return retval;
 }
 
+/*
+██████  ██    ██ ███    ██
+██   ██ ██    ██ ████   ██
+██████  ██    ██ ██ ██  ██
+██   ██ ██    ██ ██  ██ ██
+██   ██  ██████  ██   ████
+*/
 void run_game(Unit *units)
 {
+// test
+initprojectiletypes();
+// endtest
   CURRENTCOMMAND = COMMAND_IDLE;
   int deltatime = 0;
   raylib_init_textures();
@@ -1761,7 +2120,13 @@ void run_game(Unit *units)
     raylib_input(units,camera);
     tick_units(units,deltatime);
     raylib_draw(units,&camera);
+// test
+tickprojectiles(deltatime);
+// endtest
   }
+// test
+endprojectiles();
+// endtest
   raylib_free_models(units);
   ui_end();
 }
@@ -1771,19 +2136,99 @@ int main()
   srand(time(0));
 
   selected = NULL;
-  Unit *units;
+  units = NULL;
+//  Unit *units;
   read_weapontable_file("weapons.txt");
   units = read_units_file("units.txt");
 
   raylib_init();
+//test
+blastmarker = LoadModel("resources/blastmarker.obj");
+//endtest
+
   run_game(units);
   free(units);
   for(int i=0;i<NUMTEAMS;i++)
   {
-    free(TEAMIDS[i]);
+    free(TEAMS[i].spots);
+    free(TEAMS[i].unitids);
   }
-  free(TEAMIDS);
+  free(TEAMS);
   raylib_end();
 
   return 0;
+}
+
+/*
+████████ ███████ ███████ ████████
+   ██    ██      ██         ██
+   ██    █████   ███████    ██
+   ██    ██           ██    ██
+   ██    ███████ ███████    ██
+*/
+void initprojectiletypes()
+{
+  PROJECTILETYPES = malloc(sizeof(ProjectileType)*NUMPROJECTILETYPES);
+  PROJECTILETYPES[0].model = LoadModel("resources/blastmarker.obj");
+  PROJECTILETYPES[0].basevelocity = (Vector3){0.0f,0.0f,0.0f};
+  PROJECTILETYPES[0].speed = 1;
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    PROJECTILES[i].TTL = -1;
+  }
+}
+void addprojectile(Vector3 position,Vector3 target,int type)
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL < 0)
+    {
+      PROJECTILES[i].position = position;
+      PROJECTILES[i].target = target;
+float angle = atan2f(position.z-target.z,position.x-target.z);
+float speed = PROJECTILETYPES[PROJECTILES[i].type].speed;
+PROJECTILES[i].velocity.x = cosf(angle)*speed*-1/10;
+PROJECTILES[i].velocity.y = 0;
+PROJECTILES[i].velocity.z  = sinf(angle)*speed*-1/10;
+printf("v:%f,%f,%f\n",PROJECTILES[i].velocity.x,PROJECTILES[i].velocity.y,PROJECTILES[i].velocity.z);
+printf("a:%f,%f\n",cosf(angle)*speed*-1,sinf(angle)*speed*-1);
+      PROJECTILES[i].TTL = 1000;
+      PROJECTILES[i].type = type;
+      break;
+    }
+  }
+}
+void deleteprojectile(int id)
+{
+  PROJECTILES[id].TTL = -1;
+}
+void endprojectiles()
+{
+  free(PROJECTILETYPES);
+}
+void drawprojectiles()
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL > 0)
+    {
+      DrawModel(PROJECTILETYPES[PROJECTILES[i].type].model,PROJECTILES[i].position,1.0f,YELLOW);
+    }
+  }
+}
+void tickprojectiles(int deltatime)
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL > 0)
+    {
+      PROJECTILES[i].TTL -= deltatime;
+      Vector3 velocity = Vector3Multiply(PROJECTILES[i].velocity,deltatime);
+      PROJECTILES[i].position = Vector3Add(PROJECTILES[i].position,velocity);
+// TODO
+      float maxdistance = MOVEDISTANCE * PROJECTILETYPES[PROJECTILES[i].type].speed;
+      if(Vector3Distance(PROJECTILES[i].position,PROJECTILES[i].target)<maxdistance)
+        PROJECTILES[i].TTL = -1;
+    }
+  }
 }
