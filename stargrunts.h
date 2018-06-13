@@ -1,10 +1,6 @@
 #include "raylib.h"
 
-#define RAYMATH_IMPLEMENTATION
 #include "raymath.h"
-
-#define RAYGUI_IMPLEMENTATION
-#include "raygui.h"
 
 #include "enums.h"
 /*
@@ -18,6 +14,8 @@ typedef struct Tile Tile;
 typedef struct Terraintile Terraintile;
 typedef struct TileType TileType;
 typedef struct Weapon Weapon;
+typedef struct Projectile Projectile;
+typedef struct ProjectileType ProjectileType;
 typedef struct Figure Figure;
 typedef struct Unit Unit;
 typedef struct Team Team;
@@ -47,8 +45,23 @@ struct Weapon
   int IV;
   int flags;
   int burst;
+  int projectiletype;
 
   char name[MAXNAMELENGTH];
+};
+struct Projectile
+{
+  Vector3 position;
+  Vector3 target;
+  Vector3 velocity;
+  float TTL;
+  int type;
+};
+struct ProjectileType
+{
+  Model model;
+  Vector3 basevelocity;
+  float speed;
 };
 struct Figure
 {
@@ -58,6 +71,7 @@ struct Figure
   int wflags;
   int burst;
   int ammo;
+  int projectiletype;
 
   int movespeed;
 
@@ -78,6 +92,8 @@ struct Figure
   int actiontimer;
   int spottingtimer;
   int doingcommand;
+
+  Figure *enemytarget;
 
   char name[MAXNAMELENGTH];
 };
@@ -117,6 +133,16 @@ struct Team
 void DebugLog(int debuglvl,const char *format, ...);
 
 /*
+███    ███  █████  ████████ ██   ██
+████  ████ ██   ██    ██    ██   ██
+██ ████ ██ ███████    ██    ███████
+██  ██  ██ ██   ██    ██    ██   ██
+██      ██ ██   ██    ██    ██   ██
+*/
+float Vector3DistanceSqr(Vector3 v1, Vector3 v2);
+float Vector3LengthSqr(const Vector3 v);
+
+/*
 ██████  ██  ██████ ███████
 ██   ██ ██ ██      ██
 ██   ██ ██ ██      █████
@@ -138,7 +164,8 @@ void openshift(int sides1, int dir,int sides2,int *result);
    ██    ██ ██      ██  ██       ██
    ██    ██  ██████ ██   ██ ███████
 */
-void tick_units(Unit *units,int deltatime);
+void units_tick(Unit *units,int deltatime);
+void projectiles_tick(int deltatime);
 
 /*
  ██████  ██████  ███    ███ ███    ███  █████  ███    ██ ██████  ███████
@@ -150,6 +177,18 @@ void tick_units(Unit *units,int deltatime);
 int command_fire(Unit *unit1,Unit *unit2);
 int command_move(Unit *unit,Vector3 position);
 int command_idle(Unit *unit);
+
+/*
+██████  ██████   ██████       ██ ███████  ██████ ████████ ██ ██      ███████ ███████
+██   ██ ██   ██ ██    ██      ██ ██      ██         ██    ██ ██      ██      ██
+██████  ██████  ██    ██      ██ █████   ██         ██    ██ ██      █████   ███████
+██      ██   ██ ██    ██ ██   ██ ██      ██         ██    ██ ██      ██           ██
+██      ██   ██  ██████   █████  ███████  ██████    ██    ██ ███████ ███████ ███████
+*/
+void projectiles_init();
+void projectiles_end();
+void projectiles_draw();
+void projectile_add(Vector3 position,Vector3 target,int type);
 
 /*
 ██    ██ ███    ██ ██ ████████      █████   ██████ ████████ ██  ██████  ███    ██ ███████
@@ -179,7 +218,7 @@ int do_action_fire(Figure attacker,Figure *defender);
 int do_action_fire_position(Figure attacker,Vector3 position);
 int do_action_unpanic(Figure *figure);
 int do_action_unsuppress(Figure *figure);
-int do_action_move_in_position(Figure *figure);
+int do_action_go_prone(Figure *figure);
 
 /*
 ███████ ██  ██████  ██    ██ ██████  ███████      ██████  ███████ ████████ ███████ ███████ ████████
@@ -389,6 +428,9 @@ int PLAYERTEAM = 0;
 
 Weapon *WEAPONTABLE;
 
+Projectile PROJECTILES[MAXPROJECTILES];
+ProjectileType *PROJECTILETYPES;
+
 Rectangle *UNIT_ICON_RECTANGLES;
 Texture2D TEXTURES[NUMTEXTURES];
 Vector3 FORMATIONPOSITION[] =
@@ -407,7 +449,7 @@ int ACTIONTIMERS[] =
   1000, // ACTION_NOTARGET
   1000, // ACTION_NOAMMO
   1000, // ACTION_MOVE
-  1000, // ACTION_MOVE_POSITION
+  1000, // ACTION_GO_PRONE
   1000, // ACTION_RALLY
   1000, // ACTION_REGROUP
   1000, // ACTION_IDLE
@@ -426,34 +468,9 @@ Model blastmarker;
 Vector3 blastpos;
 
 // projectile stuff
-typedef struct Projectile Projectile;
-typedef struct ProjectileType ProjectileType;
-struct Projectile
-{
-  Vector3 position;
-  Vector3 target;
-  Vector3 velocity;
-  int TTL;
-  int type;
-};
-struct ProjectileType
-{
-  Model model;
-  Vector3 basevelocity;
-  float speed;
-};
-void initprojectiletypes();
-void addprojectile(Vector3 position,Vector3 target,int type);
-void deleteprojectile(int id);
-void endprojectiles();
-void drawprojectiles();
-void tickprojectiles(int deltatime);
-#define MAXPROJECTILES 25
-#define NUMPROJECTILETYPES 2
-Projectile PROJECTILES[MAXPROJECTILES];
-ProjectileType *PROJECTILETYPES;
 /*
 projectiles:
-spawn with speed and model at firer position and TTL
+spawn with speed and model at firer position and TTL (distance to target)
 3 animations: fire,flight, impact
+will need separate models for rotation
 */

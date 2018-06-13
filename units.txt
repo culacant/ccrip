@@ -10,7 +10,7 @@ uname one
 commandlevel SQUAD
 uflags EXISTS,
 position 1,0,6
-figurecnt 3
+figurecnt 5
 
 figure 1
 fname oneone
@@ -45,6 +45,28 @@ quality VETERAN
 confidence SHAKEN
 fflags EXISTS
 
+figure 4
+fname onefour
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence CONFIDENT
+fflags EXISTS
+
+figure 5
+fname onefive
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence CONFIDENT
+fflags EXISTS
+
 unit 2
 team 2
 uname mortar
@@ -70,7 +92,7 @@ uname three
 commandlevel SQUAD
 uflags EXISTS,
 position 1,0,10
-figurecnt 2
+figurecnt 5
 
 figure 1
 fname threeone
@@ -85,6 +107,39 @@ fflags EXISTS,LEADER
 
 figure 2
 fname threetwo
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS
+
+figure 3
+fname threethree
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS
+
+figure 4
+fname threefour
+weapon 1
+ammo 100
+movespeed 100
+AT PARTIAL_LIGHT
+LV BEST
+quality VETERAN
+confidence STEADY
+fflags EXISTS
+
+figure 5
+fname threefive
 weapon 1
 ammo 100
 movespeed 100

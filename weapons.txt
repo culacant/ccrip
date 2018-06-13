@@ -5,6 +5,7 @@ name M32
 FP 2
 IV 10
 burst 3
+projectiletype 0
 flags NONE,
 
 weapon 2
@@ -12,6 +13,7 @@ name M256
 FP 2
 IV 10
 burst 5
+projectiletype 0
 flags SUPPORT,
 
 weapon 3
@@ -19,4 +21,5 @@ name mortar
 FP 3
 IV 8
 burst 1
+projectiletype 0
 flags HEAVY,BLAST,

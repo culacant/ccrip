@@ -7,6 +7,9 @@
 #define ICONHEIGHT 32
 #define ICONWIDTH  32
 
+#define MAXPROJECTILES 25
+#define NUMPROJECTILETYPES 2
+
 #define SUMMARYWIDTH 256
 #define SUMMARYHEADERHEIGHT 50+2
 #define SUMMARYFIGUREHEIGHT 32
@@ -19,6 +22,9 @@
 #define SELECTDISTANCE 5
 #define MOVEDISTANCE 0.5
 #define COVERDISTANCE 5
+
+#define MAXSUPPRESSION 5
+#define SUPPRESSTIMER 2500
 
 enum LOGLEVELS
 {
@@ -111,7 +117,7 @@ enum CONFIDENCE
 enum COVER
 {
   NONE        = 1<<0,
-  IN_POSITION = 1<<1,
+  PRONE       = 1<<1,
   SOFT        = 1<<2,
   HARD        = 1<<3,
 };
@@ -159,7 +165,7 @@ enum ACTIONS
   ACTION_NOTARGET       =  4,
   ACTION_NOAMMO         =  5,
   ACTION_MOVE           =  6,
-  ACTION_MOVE_POSITION  =  7,
+  ACTION_GO_PRONE       =  7,
   ACTION_RALLY          =  8,
   ACTION_REGROUP        =  9,
   ACTION_IDLE           = 10,

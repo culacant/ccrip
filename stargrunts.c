@@ -30,6 +30,27 @@ void DebugLog(int loglvl,const char *format, ...)
 }
 
 /*
+███    ███  █████  ████████ ██   ██
+████  ████ ██   ██    ██    ██   ██
+██ ████ ██ ███████    ██    ███████
+██  ██  ██ ██   ██    ██    ██   ██
+██      ██ ██   ██    ██    ██   ██
+*/
+float Vector3DistanceSqr(Vector3 v1, Vector3 v2)
+{
+  float dx = v2.x - v1.x;
+  float dy = v2.y - v1.y;
+  float dz = v2.z - v1.z;
+  float result = dx*dx + dy*dy + dz*dz;
+  return result;
+}
+float Vector3LengthSqr(const Vector3 v)
+{
+  float result = v.x*v.x + v.y*v.y + v.z*v.z;
+  return result;
+}
+
+/*
 ██████  ██  ██████ ███████
 ██   ██ ██ ██      ██
 ██   ██ ██ ██      █████
@@ -134,7 +155,7 @@ void openshift(int sides1, int dir, int sides2, int *result)
    ██    ██ ██      ██  ██       ██
    ██    ██  ██████ ██   ██ ███████
 */
-void tick_units(Unit *units,int deltatime)
+void units_tick(Unit *units,int deltatime)
 {
   Figure *figure = NULL;
   Figure *figuretarget = NULL;
@@ -172,25 +193,22 @@ void tick_units(Unit *units,int deltatime)
                 break;
               case ACTION_FIRE:
               case ACTION_NOTARGET:
-                figuretarget = NULL;
-                figuretarget = get_enemy_target_figure(unit,j);
-                if(figuretarget)
+                if(figure->enemytarget)
                 {
                   figure->ammo -= figure->burst;
+                  projectile_add(figure->position,figure->enemytarget->position,figure->projectiletype);
                   if(figure->wflags&BLAST)
-                    do_action_fire_position(*figure,figuretarget->position);
+                    do_action_fire_position(*figure,figure->enemytarget->position);
                   else
-                    do_action_fire(*figure,figuretarget);
+                    do_action_fire(*figure,figure->enemytarget);
                 }
-                else
-                  figure->action = ACTION_NOTARGET;
                 break;
               case ACTION_MOVE:
                 figure->doingcommand = do_action_move(unit,j);
                 DebugLog(LOGACTIONS,"%i\n",figure->doingcommand);
                 break;
-              case ACTION_MOVE_POSITION:
-                do_action_move_in_position(figure);
+              case ACTION_GO_PRONE:
+                do_action_go_prone(figure);
                 break;
               case ACTION_RALLY:
                 do_action_rally(*unit,unit->friendlytarget);
@@ -202,13 +220,46 @@ void tick_units(Unit *units,int deltatime)
                 break;
             }
             figure->action = get_next_action_figure(*unit,j);
+
             if(figure->action == ACTION_MOVE)
               figure->actiontimer = figure->movespeed;
             else
+            {
               figure->actiontimer = ACTIONTIMERS[figure->action];
+              switch(figure->action)
+              {
+                case ACTION_FIRE:
+                  if(figure->ammo <= 0)
+                  {
+                    figure->ammo = 0;
+                    DebugLog(LOGACTIONS,"ACTION_NOAMMO\n");
+                    figure->action = ACTION_NOAMMO;
+                    break;
+                  }
+                  figure->enemytarget = get_enemy_target_figure(unit,j);
+                  if(figure->enemytarget == NULL)
+                  {
+                    DebugLog(LOGACTIONS,"ACTION_NOTARGET\n");
+                    figure->action = ACTION_NOTARGET;
+                  }
+                  break;
+              }
+            }
           }
         }
       }
+    }
+  }
+}
+void projectiles_tick(int deltatime)
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL > 0)
+    {
+      Vector3 velocity = Vector3Multiply(PROJECTILES[i].velocity,deltatime);
+      PROJECTILES[i].position = Vector3Add(PROJECTILES[i].position,velocity);
+      PROJECTILES[i].TTL -= Vector3Length(velocity);
     }
   }
 }
@@ -242,6 +293,58 @@ int command_idle(Unit *unit)
 {
   unit->command = COMMAND_IDLE;
   return 1;
+}
+
+/*
+██████  ██████   ██████       ██ ███████  ██████ ████████ ██ ██      ███████ ███████
+██   ██ ██   ██ ██    ██      ██ ██      ██         ██    ██ ██      ██      ██
+██████  ██████  ██    ██      ██ █████   ██         ██    ██ ██      █████   ███████
+██      ██   ██ ██    ██ ██   ██ ██      ██         ██    ██ ██      ██           ██
+██      ██   ██  ██████   █████  ███████  ██████    ██    ██ ███████ ███████ ███████
+*/
+void projectiles_init()
+{
+  PROJECTILETYPES = malloc(sizeof(ProjectileType)*NUMPROJECTILETYPES);
+  PROJECTILETYPES[0].model = LoadModel("resources/bullet.obj");
+  PROJECTILETYPES[0].basevelocity = (Vector3){0.0f,0.0f,0.0f};
+  PROJECTILETYPES[0].speed = 1;
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    PROJECTILES[i].TTL = -1;
+  }
+}
+void projectiles_end()
+{
+  free(PROJECTILETYPES);
+}
+void projectiles_draw()
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL > 0)
+    {
+      DrawModel(PROJECTILETYPES[PROJECTILES[i].type].model,PROJECTILES[i].position,1.0f,YELLOW);
+    }
+  }
+}
+void projectile_add(Vector3 position,Vector3 target,int type)
+{
+  for(int i=0;i<MAXPROJECTILES;i++)
+  {
+    if(PROJECTILES[i].TTL < 0)
+    {
+      PROJECTILES[i].position = position;
+      PROJECTILES[i].target = target;
+      float angle = atan2f(position.z-target.z,position.x-target.x);
+      float speed = PROJECTILETYPES[PROJECTILES[i].type].speed;
+      PROJECTILES[i].velocity.x = cosf(angle)*speed*-1/10;
+      PROJECTILES[i].velocity.y = 0;
+      PROJECTILES[i].velocity.z  = sinf(angle)*speed*-1/10;
+      PROJECTILES[i].TTL = Vector3Distance(position,target);
+      PROJECTILES[i].type = type;
+      break;
+    }
+  }
 }
 
 /*
@@ -324,7 +427,7 @@ int do_action_move(Unit *unit,int figureid)
     movepos.z = sinf(figure->facing);
     movepos.y = 0.0f;
     figure->position = Vector3Add(figure->position,movepos);
-    if(Vector3Distance(figure->position,goalpos) < MOVEDISTANCE)
+    if(Vector3DistanceSqr(figure->position,goalpos) < MOVEDISTANCE*MOVEDISTANCE)
     {
       return 0;
     }
@@ -436,9 +539,11 @@ int do_action_fire_position(Figure attacker,Vector3 position)
   Vector3 finalpos = position;
   finalpos.x += cosf(direction)*deviation;
   finalpos.z += sinf(direction)*deviation;
+
 //test
   blastpos = finalpos;
 //endtest
+
 // resolve
   for(int i=0;i<NUMUNITS;i++)
   {
@@ -481,14 +586,14 @@ int do_action_unsuppress(Figure *figure)
   }
   return 0;
 }
-int do_action_move_in_position(Figure *figure)
+int do_action_go_prone(Figure *figure)
 {
   int threatlevel = 2;
 //  if(get_cover(*figure) > 0)
 //    threatlevel = 0;
   if(test_reaction(*figure,threatlevel) == 0)
     return 0;
-  figure->cover |= IN_POSITION;
+  figure->cover |= PRONE;
   return 1;
 }
 
@@ -502,7 +607,7 @@ int do_action_move_in_position(Figure *figure)
 Vector3 get_position_formation(Unit unit, int figureid)
 {
     Vector3 position = Vector3Multiply(FORMATIONPOSITION[unit.formation],unit.spread*figureid);
-    Vector3Transform(&position,MatrixRotateY(unit.facing));
+    position = Vector3Transform(position,MatrixRotateY(unit.facing));
     position = Vector3Add(unit.goal,position);
     return position;
 }
@@ -530,7 +635,7 @@ int get_leader_id(Unit unit)
 int get_cover(Figure attacker, Figure defender)
 {
   int cover = 0;
-  if(defender.cover & IN_POSITION)
+  if(defender.cover & PRONE)
     cover++;
   cover += figure_in_cover_from_attacker(attacker,defender);
   return cover;
@@ -538,7 +643,7 @@ int get_cover(Figure attacker, Figure defender)
 int get_cover_position(Vector3 position, Figure defender)
 {
   int cover = 0;
-  if(defender.cover & IN_POSITION)
+  if(defender.cover & PRONE)
     cover++;
   cover += figure_in_cover_from_position(position,defender);
   return cover;
@@ -559,8 +664,8 @@ int get_figure_suppressed(Figure figure)
 void set_suppressed(Figure *figure)
 {
   figure->suppressed++;
-  if(figure->suppressed > 3)
-    figure->suppressed = 3;
+  if(figure->suppressed > MAXSUPPRESSION)
+    figure->suppressed = MAXSUPPRESSION;
   figure->flags |= SUPPRESSED;
 }
 void set_unsuppressed(Figure *figure)
@@ -708,9 +813,8 @@ int get_next_action_figure(Unit unit,int figureid)
         break;
       case COMMAND_FIRE:
         DebugLog(LOGACTIONS,"ACTION_FIRE\n");
-        if(unit.figures[figureid].ammo <= 0)
-          return ACTION_NOAMMO;
         return ACTION_FIRE;
+// NOTARGET and NOAMMO handled in tick_units
         break;
     }
   }
@@ -831,7 +935,7 @@ int test_figure_selectable(const Figure *figure1,const Figure *figure2)
 int figure_in_cover_from_attacker(Figure attacker,Figure defender)
 {
   Vector3 maxcoverpos = Vector3Subtract(attacker.position,defender.position);
-  Vector3Normalize(&maxcoverpos);
+  maxcoverpos = Vector3Normalize(maxcoverpos);
   maxcoverpos = Vector3Multiply(maxcoverpos,COVERDISTANCE);
   maxcoverpos = Vector3Add(maxcoverpos,defender.position);
   return get_map_line_value(get_tile_xy_at(defender.position),get_tile_xy_at(maxcoverpos),COVER);
@@ -839,7 +943,7 @@ int figure_in_cover_from_attacker(Figure attacker,Figure defender)
 int figure_in_cover_from_position(Vector3 position,Figure defender)
 {
   Vector3 maxcoverpos = Vector3Subtract(position,defender.position);
-  Vector3Normalize(&maxcoverpos);
+  maxcoverpos = Vector3Normalize(maxcoverpos);
   maxcoverpos = Vector3Multiply(maxcoverpos,COVERDISTANCE);
   maxcoverpos = Vector3Add(maxcoverpos,defender.position);
   return get_map_line_value(get_tile_xy_at(defender.position),get_tile_xy_at(maxcoverpos),COVER);
@@ -1087,6 +1191,8 @@ Unit* read_units_file(const char *filename)
       Vector3 finalpos = Vector3Add(units[unitid].goal,relposition);
       units[unitid].figures[figureid].position = finalpos;
       units[unitid].figures[figureid].spottingtimer = unitid*100 + figureid*10;
+      units[unitid].figures[figureid].enemytarget = NULL;
+      units[unitid].figures[figureid].doingcommand = 0;
     }
     if(strcmp("fname",varname) == 0)
     {
@@ -1099,6 +1205,7 @@ Unit* read_units_file(const char *filename)
       units[unitid].figures[figureid].IV = WEAPONTABLE[atoi(varvalue)-1].IV;
       units[unitid].figures[figureid].wflags = WEAPONTABLE[atoi(varvalue)-1].flags;
       units[unitid].figures[figureid].burst = WEAPONTABLE[atoi(varvalue)-1].burst;
+      units[unitid].figures[figureid].projectiletype = WEAPONTABLE[atoi(varvalue)-1].projectiletype;
     }
     if(strcmp("ammo",varname) == 0)
       units[unitid].figures[figureid].ammo = atoi(varvalue);
@@ -1153,6 +1260,8 @@ void read_weapontable_file(const char *filename)
       WEAPONTABLE[weaponid].flags = flag_string_to_int(varvalue);
     if(strcmp("burst",varname) == 0)
       WEAPONTABLE[weaponid].burst= atoi(varvalue);
+    if(strcmp("projectiletype",varname) == 0)
+      WEAPONTABLE[weaponid].projectiletype= atoi(varvalue);
   }
   fclose(file);
 }
@@ -1496,8 +1605,8 @@ void cover_enum_to_string(char *out, int cover)
     strcat(out,"SOFT");
   else if(cover & NONE)
     strcat(out,"NONE");
-  if(cover & IN_POSITION)
-    strcat(out,"IN_POSITION");
+  if(cover & PRONE)
+    strcat(out,"PRONE");
 }
 void actions_enum_to_string(char *out, int action)
 {
@@ -1524,7 +1633,7 @@ void actions_enum_to_string(char *out, int action)
     case ACTION_MOVE:
       strcpy(out,"moving");
       break;
-    case ACTION_MOVE_POSITION:
+    case ACTION_GO_PRONE:
       strcpy(out,"taking cover");
       break;
     case ACTION_RALLY:
@@ -1623,10 +1732,11 @@ void raylib_init()
 Camera raylib_init_camera()
 {
   Camera camera;
-  camera.position = (Vector3){ 0.0f, 2.0f, 0.0f };
-  camera.target = (Vector3){ 5.0f, 0.0f, 5.0f };
-  camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+  camera.position = (Vector3){10.0f,10.0f,10.0f};
+  camera.target = (Vector3){0.0f,0.0f,0.0f};
+  camera.up = (Vector3){0.0f,1.0f,0.0f};
   camera.fovy = 45.0f;
+  camera.type = CAMERA_PERSPECTIVE;
   SetCameraMode(camera,CAMERA_FREE);
   return camera;
 }
@@ -1679,7 +1789,7 @@ void raylib_draw(Unit *units,Camera *camera)
   UpdateCamera(camera);
   BeginDrawing();
     ClearBackground(RAYWHITE);
-    Begin3dMode(*camera);
+    BeginMode3D(*camera);
 // figures
       Color unitcolor;
       for(int i=0;i<NUMUNITS;i++)
@@ -1699,9 +1809,10 @@ void raylib_draw(Unit *units,Camera *camera)
           DrawCube(units[i].goal, 0.5f, 0.5f, 0.5f, RAYGREEN);
 // test
 DrawModel(blastmarker,blastpos,1.0f,ORANGE);
-drawprojectiles();
 // endtest
 
+// projectiles
+          projectiles_draw();
           for(int j=0;j<MAXFIGURES;j++)
           {
             if(test_figure_exists(units[i].figures[j]))
@@ -1717,7 +1828,7 @@ drawprojectiles();
         }
       }
     map_draw();
-    End3dMode();
+    EndMode3D();
     ui_draw(*camera);
 // icons
     ui_draw_unit_icons(units,*camera);
@@ -1776,7 +1887,6 @@ void raylib_input(Unit *units,Camera camera)
     if(selected)
     {
       CURRENTCOMMAND = COMMAND_TEST;
-      addprojectile(selected->figures[0].position,(Vector3){0.0f,0.0f,0.0f},0);
     }
   }
   if(IsKeyReleased(CONTROL_TEST_2))
@@ -2104,9 +2214,7 @@ int get_map_line_value(Vector2 start,Vector2 end,int value)
 */
 void run_game(Unit *units)
 {
-// test
-initprojectiletypes();
-// endtest
+  projectiles_init();
   CURRENTCOMMAND = COMMAND_IDLE;
   int deltatime = 0;
   raylib_init_textures();
@@ -2118,15 +2226,11 @@ initprojectiletypes();
   {
     deltatime = (int)(GetFrameTime()*1000);
     raylib_input(units,camera);
-    tick_units(units,deltatime);
+    units_tick(units,deltatime);
     raylib_draw(units,&camera);
-// test
-tickprojectiles(deltatime);
-// endtest
+    projectiles_tick(deltatime);
   }
-// test
-endprojectiles();
-// endtest
+  projectiles_end();
   raylib_free_models(units);
   ui_end();
 }
@@ -2157,78 +2261,4 @@ blastmarker = LoadModel("resources/blastmarker.obj");
   raylib_end();
 
   return 0;
-}
-
-/*
-████████ ███████ ███████ ████████
-   ██    ██      ██         ██
-   ██    █████   ███████    ██
-   ██    ██           ██    ██
-   ██    ███████ ███████    ██
-*/
-void initprojectiletypes()
-{
-  PROJECTILETYPES = malloc(sizeof(ProjectileType)*NUMPROJECTILETYPES);
-  PROJECTILETYPES[0].model = LoadModel("resources/blastmarker.obj");
-  PROJECTILETYPES[0].basevelocity = (Vector3){0.0f,0.0f,0.0f};
-  PROJECTILETYPES[0].speed = 1;
-  for(int i=0;i<MAXPROJECTILES;i++)
-  {
-    PROJECTILES[i].TTL = -1;
-  }
-}
-void addprojectile(Vector3 position,Vector3 target,int type)
-{
-  for(int i=0;i<MAXPROJECTILES;i++)
-  {
-    if(PROJECTILES[i].TTL < 0)
-    {
-      PROJECTILES[i].position = position;
-      PROJECTILES[i].target = target;
-float angle = atan2f(position.z-target.z,position.x-target.z);
-float speed = PROJECTILETYPES[PROJECTILES[i].type].speed;
-PROJECTILES[i].velocity.x = cosf(angle)*speed*-1/10;
-PROJECTILES[i].velocity.y = 0;
-PROJECTILES[i].velocity.z  = sinf(angle)*speed*-1/10;
-printf("v:%f,%f,%f\n",PROJECTILES[i].velocity.x,PROJECTILES[i].velocity.y,PROJECTILES[i].velocity.z);
-printf("a:%f,%f\n",cosf(angle)*speed*-1,sinf(angle)*speed*-1);
-      PROJECTILES[i].TTL = 1000;
-      PROJECTILES[i].type = type;
-      break;
-    }
-  }
-}
-void deleteprojectile(int id)
-{
-  PROJECTILES[id].TTL = -1;
-}
-void endprojectiles()
-{
-  free(PROJECTILETYPES);
-}
-void drawprojectiles()
-{
-  for(int i=0;i<MAXPROJECTILES;i++)
-  {
-    if(PROJECTILES[i].TTL > 0)
-    {
-      DrawModel(PROJECTILETYPES[PROJECTILES[i].type].model,PROJECTILES[i].position,1.0f,YELLOW);
-    }
-  }
-}
-void tickprojectiles(int deltatime)
-{
-  for(int i=0;i<MAXPROJECTILES;i++)
-  {
-    if(PROJECTILES[i].TTL > 0)
-    {
-      PROJECTILES[i].TTL -= deltatime;
-      Vector3 velocity = Vector3Multiply(PROJECTILES[i].velocity,deltatime);
-      PROJECTILES[i].position = Vector3Add(PROJECTILES[i].position,velocity);
-// TODO
-      float maxdistance = MOVEDISTANCE * PROJECTILETYPES[PROJECTILES[i].type].speed;
-      if(Vector3Distance(PROJECTILES[i].position,PROJECTILES[i].target)<maxdistance)
-        PROJECTILES[i].TTL = -1;
-    }
-  }
 }
